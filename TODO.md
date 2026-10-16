@@ -32,6 +32,14 @@ Plan and context: `docs/plan.md`.
   `step` path over 100,000 calls and again at 1,000,000 (live handles and
   allocator high-water, stated ceilings); keep the first divergent frame's
   index and data when hashes differ.
+  From run r-s4pab6ns (library mode): Robokill threads its state through
+  returns (`hash(s) -> State & U32`, `render(s, out) -> State &
+  Array<F32>`, `step(s, +inp)`; `+` only on scalars, Robokill `63031ab`
+  `spike/step.bend` 350-476), so library mode must return tuples of a
+  handle and a scalar or an `Array<F32>`, and take an `Array<F32>` in;
+  extend patch 0003 for that here. The borrow rule ("`+` parameter is
+  borrowed by `term_keep`") is not exercised by Robokill; keep it, tested
+  by `probe/lib`.
 - [ ] Wasm module plus JS glue with the JS lane's `G.*` shape (`init`, [t-2czhzqqy]
   `step`, `input_at`, `render` into a fixed exported F32 region viewed once,
   `hash`), and a Chrome benchmark against Robokill's JS lane (p95 1.09 ms at
@@ -40,6 +48,10 @@ Plan and context: `docs/plan.md`.
   Also (same round): define what happens after a wasm trap (the instance is
   poisoned: invalidate handles and re-instantiate, tested), and measure the
   tab's memory with the fixed 512 MiB corpus beside the game's WebGPU use.
+  From run r-s4pab6ns: a misuse (stale handle, slot table full at
+  `BEND_LIB_SLOTS` 4096) ends the process with `_exit(1)`, an unhandled
+  `ExitStatus` in Node; decide here, with the trap rule, whether the glue
+  turns it into a thrown JS error and a poisoned instance.
 - [ ] Offer the patch series upstream on [t-yuiyk4uz]
   https://github.com/bendlang/bend/issues/1598 (the user approves the text
   first).
