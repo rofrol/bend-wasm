@@ -104,8 +104,23 @@ Plan and context: `docs/plan.md`.
   `import x from "./x.bend"`; upstream ships its release `bend` binary
   built with `bun build --compile` (CHANGELOG, #1025); no self-hosting plan
   found in its README, CHANGELOG or WONTFIX. The compiler is upstream's;
-  bend-wasm only pins it. Answer and any change decided after a consult
-  round; recorded here.
+  bend-wasm only pins it; it has no `package.json` or npm dependencies
+  (imports only `bun` and built-ins), so its supply chain is Bun itself.
+  Decided by the coordinator after consult round `20261016-194422-4983`
+  (sol, mimo, deepseek, argon, wonder, agreeing): the language is not a
+  material weakness here (build time only, Emscripten dominates the build,
+  TypeScript makes rebasing our `comp.ts` patches easier); keep the
+  upstream compiler; do not rewrite or port it (months, a permanent fork)
+  and do not ask upstream for a language change (it chose TypeScript for
+  the Bun/Node import hooks). The real risks are reproducibility and the
+  build's trust in Bun: the next item. A single compiled binary (`bun
+  build --compile`) only if a separate Bun install becomes a measured
+  burden (it embeds the same runtime; not a security gain).
+- [ ] Build reproducibility (from the compiler question): `scripts/bend` [t-3rs6ne3b]
+  checks Bun's exact build (`bun --revision`, not only the version) and
+  `--toolchain` prints it; a check emits the C of a few programs twice
+  from clean caches (and with the patch series) and requires byte-identical
+  output, so ordering or environment inputs in the emitter would show.
 - [ ] Freestanding wasm build beside Emscripten (from the Zig request, [t-nt66wuif]
   consult round `20261016-175818-a3e6`), after the memory patch and its
   measurement: first `-sSTANDALONE_WASM --no-entry` with Emscripten's own
@@ -185,3 +200,7 @@ Plan and context: `docs/plan.md`.
 ## Needs a decision
 
 ## Proposed
+- [ ] Type-check the patched compiler (`tsc --noEmit` over the patched [t-dyxn2pn3]
+  `bend2/*.ts`; Bun strips types without checking them, mimo): needs the
+  TypeScript package, a new pinned build dependency fetched by the
+  coordinator; catches type errors our `comp.ts` patches introduce.
