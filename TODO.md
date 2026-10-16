@@ -148,14 +148,4 @@ Plan and context: `docs/plan.md`.
 
 ## Needs a decision
 
-- [ ] Disk again below herdr's 15 GiB guard: the audit (t-ap3q3hvo) did [t-qllu2n7k]
-  not start, "12.8 GiB free ... less than 15 GiB" (run r-tbldnqua's
-  next_refusal, 2026-10-16), after the earlier fix brought 16 GiB. How to
-  proceed?
-  Options: the user frees more space elsewhere | the coordinator deletes bend-wasm's regenerable caches (about 0.75 GiB; not enough alone) | lower herdr's disk threshold
-  Checked: `df` 13 GiB free; bend-wasm's caches: worker `.toolchain/`
-  411 MiB, main `.toolchain/` 206 MiB, `.cache/` 84 + 27 MiB, test
-  outputs under 40 MiB; free space fell by 3 GiB while bend-wasm grew by
-  about 0.6 GiB.
-
 ## Proposed

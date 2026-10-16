@@ -284,3 +284,6 @@ differential runs of the negative checks write to their own directory
 Both checks passed together beside a load average of 195. Limits: a
 program that ignores SIGXCPU or sleeps without using CPU is not stopped.
 No leftover process (checked by the coordinator).
+
+2026-10-16, again (d-k4topq5i): 12.8 GiB free stopped the audit; the user
+freed space (25 GiB free).
