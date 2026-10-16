@@ -689,3 +689,17 @@ them (shown failing on a patch with a type error). Pins in
 registered as the herdr check `typecheck`. The coordinator chose 6.0.3
 over 7.x (the native Go port with per-platform binaries) to keep a
 JavaScript tool run by the pinned Bun.
+
+## Bend's compiler on QuickJS (t-xz35srdq)
+
+Done 2026-10-16 (run r-qhxshnds, 7913706; user's d-2r2p2k3m): yes for
+emitting C. `bun build --target=bun` of the patched compiler, run by
+`qjs --stack-size 6M --std -m` (QuickJS 2026-06-04) with about 200 lines
+of shims over QuickJS's `std`/`os` (process, a fake `Bun` object for the
+guard, URL, a synchronous `node:fs` subset, path, url, os), emits C byte
+identical to `scripts/bend` for `nat_native.bend` and Robokill's step
+library; qjs about 1.1x and 3.8x slower than Bun. Walls: building a
+binary (spawnSync, ~30-line shim, untried), running a program
+(`bun:ffi`), `--verdict`, publish, page bundling. Reproduced by
+`tools/quickjs/run.sh`; details in `docs/quickjs.md`. Follow-up in
+Proposed.

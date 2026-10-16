@@ -4,17 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Check whether Bend's TypeScript compiler (bundled into one JS file) [t-xz35srdq]
-  runs on QuickJS, a small C JavaScript engine Debian and Guix build from
-  source: a bootstrappable path without Bun today (argon, consult round
-  `20261016-194939-a5a8`). Needs QuickJS fetched and pinned by the
-  coordinator; one worker item; result: works, or the missing features.
-  Decided by the user 2026-10-16 (d-2r2p2k3m): approved.
-  Fetched by the coordinator 2026-10-16: Bellard's QuickJS 2026-06-04
-  (latest release; Debian has 2025.04.26), `quickjs-2026-06-04.tar.xz`
-  sha256 b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a,
-  unpacked at `~/.cache/bend-wasm/quickjs-2026-06-04/`.
-
 - [ ] Plain-clang freestanding build replacing emcc (from the Zig and [t-fwjpak4c]
   clang questions; consult rounds `20261016-175818-a3e6` and
   `20261016-194631-afbb`), in steps, each its own commit:
@@ -158,3 +147,12 @@ Plan and context: `docs/plan.md`.
 ## Needs a decision
 
 ## Proposed
+
+- [ ] QuickJS as a real compile path (from t-xz35srdq, run r-qhxshnds, [t-5wpa6b2x]
+  `docs/quickjs.md`): emitting C works on QuickJS 2026-06-04 for two
+  programs with ~200 lines of std/os shims. To make it a path: run the whole
+  differential corpus through it, size `--stack-size` against the largest
+  program (Robokill needs 4 MiB, the script uses 6M), replace the fake
+  `globalThis.Bun = {}` with a patch that drops `main.ts`'s Bun guard on
+  the emit path, and pin the bundling step (Bun, or esbuild/tsc,
+  untested). Running programs needs `bun:ffi`, which QuickJS lacks.
