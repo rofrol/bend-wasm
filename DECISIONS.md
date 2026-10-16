@@ -129,3 +129,17 @@ fails explicitly by default and matches native with a 512 MiB corpus and an
 Done 2026-10-16 (run r-6npk7ina): the recipe in `patches/README.md` pipes
 `git diff` through `sed 's/^ $//'`, so patches pass the `whitespace` check
 and still apply byte for byte (checked by regenerating 0001).
+
+## Patch 0002, Emscripten (t-h3ak74p5)
+
+Done 2026-10-16 (run r-t3hzaln6): `patches/0002-emscripten.patch`, all
+under `__EMSCRIPTEN__`: explicit Term-stack room check (`WL_ROOM` against
+`stk_end`, no guard page), corpus default 512 MiB derived from
+`corpus_lay`'s check (arithmetic in the patch header), stack default 8 MiB
+(decided by the coordinator), one worker forced, no in-place corpus growth
+(ERR_HEAP), loud errors for blocking IO waits, helper-thread effects and
+sockets. Native is byte-identical (harness 51/51 with and without the
+series). Canonical wasm32 flags: `-std=c11 -O2 -mtail-call
+-sALLOW_MEMORY_GROWTH=0 -sINITIAL_MEMORY=528MB` (`probe/run.sh`
+`w32-patched`). 48 of 51 corpus programs match on wasm32; the 3 others
+are in t-tidzr2vk. Open points: t-cqjfh5mc.

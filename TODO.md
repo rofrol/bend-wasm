@@ -4,22 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Patch 0002, Emscripten (`#if defined(__EMSCRIPTEN__)`): wasm32, fixed [t-h3ak74p5]
-  corpus mapped once with no in-place growth and an explicit exhaustion
-  error, a small stack with an explicit bound check (Emscripten's
-  `mprotect` is a stub), one worker forced, IO loop and sockets fail loudly
-  when reached. Check: `probe/run.sh` programs run under Node with stdout
-  and exit code identical to native; a deep-recursion and an exhaustion
-  program fail with the explicit errors.
-  Decided by the coordinator 2026-10-16 from run r-zyipygvj (patch 0001):
-  wasm64 already matches native with 0001 alone; wasm32 matches with
-  `-DBEND_CORPUS_BYTES` of 512 MiB or 1 GiB and an 8 MiB stack, while
-  256 MiB fails the runtime's own layout check ("the GPU span is under the
-  rings, stacks and a page per lane"). The Emscripten default corpus is
-  derived from that layout check for one worker (smallest accepted size,
-  rounded up to a power of two), not guessed, and the patch header states
-  the arithmetic; memory growth stays off, with `INITIAL_MEMORY` sized to
-  hold it.
 - [ ] Follow-up of t-h3ak74p5 (patch 0002 hardening, from run r-t3hzaln6): [t-cqjfh5mc]
   (1) audit every Term-stack push in the runtime under Emscripten and show
   each is covered by `WL_ROOM` or the documented 16 KiB slack past
