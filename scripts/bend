@@ -12,13 +12,14 @@
 # appends patches to the series, for tests/negative's mutants only; they
 # are part of the series hash, so each mutant gets its own copy.
 #
-# The compiler is a Bun program; the Bun version is pinned here too, and
-# the Emscripten version is printed for the record by
-# `scripts/bend --toolchain`.
+# The compiler is a Bun program; Bun's exact build is pinned here too
+# (`bun --revision`: the version and the commit it was built from, since
+# one version number can name different builds), and the Emscripten
+# version is printed for the record by `scripts/bend --toolchain`.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 src=$root/vendor/bend
-want_bun=1.4.2
+want_bun=1.4.2+50a8a8387
 if [ ! -f "$src/bend2/main.ts" ]; then
   echo "scripts/bend: vendor/bend is not checked out; run:" >&2
   echo "  git submodule update --init --depth 1 vendor/bend" >&2
@@ -73,7 +74,7 @@ if [ -z "$bun" ]; then
   echo "scripts/bend: bun not found (need $want_bun; set BEND_BUN)" >&2
   exit 1
 fi
-have_bun=$("$bun" --version)
+have_bun=$("$bun" --revision)
 if [ "$have_bun" != "$want_bun" ]; then
   echo "scripts/bend: bun $have_bun, pinned $want_bun (set BEND_BUN)" >&2
   exit 1

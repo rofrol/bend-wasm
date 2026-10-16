@@ -8,7 +8,7 @@ the general policy in `AGENTS.md`. The plan is `docs/plan.md`.
 | Tool | Pin | Where |
 | --- | --- | --- |
 | Bend 2 | tag `v2.0.35`, commit `79df8d9c40722ee9507a1e253f283b51025f9d6c` | `vendor/bend`, a shallow submodule of https://github.com/bendlang/bend |
-| Bun | `1.4.2` | `want_bun` in `scripts/bend` |
+| Bun | `1.4.2`, build `1.4.2+50a8a8387` (`bun --revision`) | `want_bun` in `scripts/bend` |
 | Emscripten | emsdk tag `6.0.10`, SDK `6.0.10` | `~/.cache/bend-wasm/emsdk-6.0.10`, pinned in `scripts/emcc` |
 
 The emsdk pin is the newest release tag that was at least two weeks old
@@ -41,8 +41,11 @@ themselves; `scripts/bend` stops with that command when it is missing.
   commands otherwise. `BEND_WASM_EMSDK=/path/to/emsdk` points to another
   install of the same pin.
 - `scripts/bend --toolchain` prints the Bend tag and commit, the patch
-  series (below), the Bun version and the first line of
+  series (below), the Bun build (`bun --revision`) and the first line of
   `scripts/emcc --version`; record it with results.
+- `tests/repro/run.sh` checks that the emitted C is reproducible: the same
+  programs give byte-identical C from two fresh compiler copies, the second
+  run in another environment (`tests/repro/README.md`).
 
 ## Patches
 
@@ -85,6 +88,7 @@ the rerun checks in its message or results:
   and commit in this file, and update `want_bun` in `scripts/bend` if the
   release needs another Bun. The coordinator then updates `vendor/bend` in
   herdr's worker folder the same way.
-- Bun: change `want_bun` in `scripts/bend` and the table above.
+- Bun: set `want_bun` in `scripts/bend` to what the new Bun's
+  `bun --revision` prints, and update the table above.
 - Emscripten: install the new SDK into `~/.cache/bend-wasm/emsdk-<ver>` as
   above, change `want` in `scripts/emcc` and the table above.
