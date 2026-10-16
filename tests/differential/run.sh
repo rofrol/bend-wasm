@@ -4,7 +4,9 @@
 # on each lane, and each lane's stdout and exit code must match the native
 # lane's byte for byte. The lanes build a program the way Bend's own test
 # gate does (vendor/bend/gates/test.ts): `bend t.bend -o t` (clang) and run
-# `./t`; `bend t.bend -o t.js` and run `bun t.js`.
+# `./t`; `bend t.bend -o t.js` and run `bun t.js`. The wasm lane builds
+# `bend t.bend -o t.c` with scripts/emcc and scripts/wasm-flags and runs
+# the result with the Emscripten SDK's Node.
 #
 # Output: tests/differential/out/ (ignored), per program and lane the build
 # log, stdout, stderr and exit code, and summary.txt.
@@ -17,7 +19,7 @@ here=tests/differential
 out=$here/out
 # The lanes compared with native, in order. A lane is one more name here and
 # its lane_build_<name> and lane_run_<name> functions below; a listed lane
-# without them is reported as not yet available.
+# without them is reported as not available.
 lanes='js wasm'
 
 # Same Bun as scripts/bend, which checks its version on every build.
@@ -26,6 +28,9 @@ bun=${BEND_BUN:-$(command -v bun || true)}
 export BUN_JSC_maxPerThreadStackUsage=33554432
 # clang's and Bend's temporary files stay in the output directory.
 export TMPDIR="$root/$out/tmp"
+# Node of the pinned Emscripten SDK, found as probe/run.sh finds it.
+sdk=${BEND_WASM_EMSDK:-$HOME/.cache/bend-wasm/emsdk-6.0.10}
+node=$(find "$sdk/node" -path '*/bin/node' -type f 2>/dev/null | head -n 1)
 if [ -z "$bun" ]; then
   echo "tests/differential/run.sh: bun not found (set BEND_BUN)" >&2
   exit 1
@@ -67,14 +72,29 @@ lane_build_js() {
 lane_run_js() {
   timed "$bun" "$1.js"
 }
-# The wasm lane joins once a wasm build runs (TODO t-xwj7ptut).
+# The wasm target needs patches 0001 and 0002 (docs/probe.md): under
+# BEND_PATCH=0 the lane is not available.
+if [ "${BEND_PATCH:-1}" != 0 ]; then
+  lane_build_wasm() {
+    if [ -z "$node" ]; then
+      echo "no node in $sdk/node (the pinned Emscripten SDK, docs/workflow.md)"
+      return 1
+    fi
+    scripts/bend "$1" -o "$2.c" || return 1
+    # shellcheck disable=SC2046 # the flags are words on purpose
+    scripts/emcc $(scripts/wasm-flags) "$2.c" -o "$2.js"
+  }
+  lane_run_wasm() {
+    timed "$node" "$1.js"
+  }
+fi
 
 # run_lane LANE SRC BASE: builds and runs SRC on LANE into BASE.LANE.*;
 # prints "" when it ran, else the reason it did not.
 run_lane() {
   b=$3.$1
   if ! type "lane_build_$1" > /dev/null 2>&1; then
-    echo "not yet available"
+    echo "not available"
     return
   fi
   if ! lane_build_"$1" "$2" "$b" > "$b.build.log" 2>&1; then
@@ -110,8 +130,8 @@ while read -r src rest; do
   say "$p native: ran, exit $(cat "$base.native.code")"
   for lane in $lanes; do
     why=$(run_lane "$lane" "$src" "$base")
-    if [ "$why" = "not yet available" ]; then
-      say "$p $lane: not yet available"
+    if [ "$why" = "not available" ]; then
+      say "$p $lane: not available"
     elif [ -n "$why" ]; then
       say "$p $lane: FAILED, $why"
       status=1
@@ -132,6 +152,6 @@ say ""
 say "programs: $programs; ok: $(grep -c ': ok$' "$summary")," \
   "DIFFERS: $(grep -c ': DIFFERS' "$summary")," \
   "FAILED: $(grep -c ': FAILED' "$summary")," \
-  "not yet available: $(grep -c ': not yet available$' "$summary")"
+  "not available: $(grep -c ': not available$' "$summary")"
 rm -rf "$out/tmp"
 exit $status

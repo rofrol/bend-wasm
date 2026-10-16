@@ -1,0 +1,10 @@
+#!/bin/sh
+# Prints the scripts/emcc flags of the wasm target, the probe's
+# w32-patched variant (docs/probe.md, "After patches 0001 and 0002"):
+# wasm32 with tail calls and fixed memory. probe/run.sh and the wasm lane
+# of tests/differential/run.sh both build with these.
+#
+# The 528 MB hold the 512 MiB corpus and the 8 MiB Term stack (patch
+# 0002's defaults) and 8 MiB for the static data, Emscripten's own stack
+# and malloc (520 MB aborts with OOM at the stack's mmap).
+echo '-std=c11 -O2 -mtail-call -sALLOW_MEMORY_GROWTH=0 -sINITIAL_MEMORY=528MB'

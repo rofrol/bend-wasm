@@ -1,4 +1,4 @@
-# Differential test: native vs JS lane
+# Differential test: native vs JS and wasm lanes
 
 `tests/differential/run.sh` builds every program in `corpus.txt` on each
 lane and compares its stdout and exit code byte for byte with the native
@@ -10,18 +10,22 @@ sh tests/differential/run.sh
 ```
 
 It prints one line per program and lane (`ok`, `DIFFERS`, `FAILED` with the
-reason, `not yet available`) and a summary, writes everything to
+reason, `not available`) and a summary, writes everything to
 `tests/differential/out/` (ignored), and exits 0 only when every program
 matched native on every available lane.
 
-The lanes build a program as Bend's own gate does
-(`vendor/bend/gates/test.ts`), all through `scripts/bend`:
+The native and JS lanes build a program as Bend's own gate does
+(`vendor/bend/gates/test.ts`); all lanes go through `scripts/bend`:
 
 | Lane | Build | Run |
 | --- | --- | --- |
 | native | `scripts/bend P -o P.bin` (clang `-O3`) | `./P.bin` |
 | js | `scripts/bend P -o P.js` | `bun P.js`, the Bun `scripts/bend` pins, with the gate's `BUN_JSC_maxPerThreadStackUsage` |
-| wasm | not yet available; joins once a wasm build runs (TODO t-xwj7ptut) | |
+| wasm | `scripts/bend P -o P.c`, then `scripts/emcc $(scripts/wasm-flags) P.c -o P.js` (the probe's `w32-patched` target: wasm32, `-mtail-call`, fixed 528 MB memory; `docs/probe.md`) | `node P.js`, the Node of the pinned Emscripten SDK |
+
+The wasm lane needs patches 0001 and 0002: under `BEND_PATCH=0` it reports
+`not available` for every program, and the run compares native and JS
+only.
 
 A lane is a name in `lanes` plus its `lane_build_<name>` and
 `lane_run_<name>` functions in `run.sh`. Each run has a 5 s hang guard,
@@ -86,6 +90,14 @@ Every tried program that is not in the corpus:
   an audio device), so the wasm lane could not match them: `io/select_eintr`,
   `io/thread_count`, `io/confluence_threads`, `io/audio_only_open`,
   `io/audio_only_write`, `io/audio_only_close`.
+- Wasm lane only, unsupported effects: patch 0002 makes the wasm target
+  stop with an error at helper-thread effects (files, processes, random
+  numbers: `bend: blocking effects (files, processes, random numbers) are
+  not supported on this target (wasm)`), timer and stream waits (`bend:
+  waiting on a timer or a stream is not supported on this target (wasm)`)
+  and sockets (`bend: sockets are not supported on this target (wasm)`).
+  No program of the corpus reaches one: on 2026-10-16 all 51 matched
+  native on the wasm lane, so none is excluded for it.
 - Matched, left out only to keep the check short: the other 168 matching
   programs of `run/`, `eval/`, `io/` and `reg/`. To try them again, add
   their paths to `corpus.txt`.

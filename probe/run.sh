@@ -30,11 +30,9 @@ w32-tc-grow|-std=c11 -O2 -mtail-call -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=4GB|
 w64|-std=c11 -O2 -m64 -mtail-call -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=16GB|node
 w64-pthread|-std=c11 -O2 -m64 -mtail-call -pthread -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=16GB|node
 w64-web|-std=c11 -O2 -m64 -mtail-call -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=16GB -sENVIRONMENT=web|build
-w32-patched|-std=c11 -O2 -mtail-call -sALLOW_MEMORY_GROWTH=0 -sINITIAL_MEMORY=528MB|node'
-# w32-patched is the target of patch 0002: its 528 MB hold the 512 MiB
-# corpus and the 8 MiB Term stack (patch 0002's defaults) and 8 MiB for
-# the static data, Emscripten's own stack and malloc (520 MB aborts with
-# OOM at the stack's mmap).
+w32-patched|'"$(scripts/wasm-flags)"'|node'
+# w32-patched is the target of patch 0002; scripts/wasm-flags defines its
+# flags and says why 528 MB.
 
 rm -rf "$out"
 mkdir -p "$out"

@@ -1,6 +1,6 @@
 Emscripten platform support in the C runtime template (bend2/comp.ts).
-Every change is under #if defined(__EMSCRIPTEN__), so native builds emit
-the same C and behave as before. The target is wasm32 with
+Every change is under #if defined(__EMSCRIPTEN__), so native builds
+compile the same C and behave as before. The target is wasm32 with
 -sALLOW_MEMORY_GROWTH=0 and one worker (docs/decisions/0001 of bend-wasm).
 
 - Term stack overflow: pool_stack maps the stack with a PROT_NONE guard
@@ -54,15 +54,55 @@ the same C and behave as before. The target is wasm32 with
   skips posix_spawn_file_actions_addclosefrom_np, which Emscripten's libc
   does not declare.
   Printing (io_out) is unchanged.
+- Segments take Env as two pointers: WL_SIG and WL_ALL start with
+  WL_ENV_SIG and WL_ENV_ALL, which on native are "Env e" and "e" as
+  before; under Emscripten they are Env's two words, and WL_OPEN rebuilds
+  e from them. Clang's wasm32 and wasm64 ABI pass a struct by a pointer
+  to a copy in the caller's frame, and a musttail call (WL_JMP, WL_DYN)
+  frees that frame before the callee reads it, so a segment read a
+  clobbered Env: e.alc became 0 and heap_alloc took free chains from
+  address 0 (reg/nat_chain and run/bst_insert ran out of memory,
+  run/string_algorithms stopped with a stack overflow, UBSan "load of
+  address 0x00000008" in heap_alloc).
 
 Retired by: an upstream Emscripten/wasm mode of Bend's C runtime
 (https://github.com/bendlang/bend/issues/1598).
 
 diff --git a/bend2/comp.ts b/bend2/comp.ts
-index df6d538..9845a4c 100644
+index df6d538..4a7ecdd 100644
 --- a/bend2/comp.ts
 +++ b/bend2/comp.ts
-@@ -3388,11 +3388,20 @@ using namespace metal;
+@@ -2851,8 +2851,8 @@ export function compile_book(book: Bend.Book): string {
+     `(V)[${j}] = ${r};`).join(" ")}`, "",
+   `#define WL_TAKE(V) ${rs.slice(0, resw).map((r, j) =>
+     `${r} = (V)[${j}];`).join(" ")}`, "",
+-  `#define WL_SIG Env e, DEV Term* sp, u32 seq, u32 rn, ${ws.map((w) =>
+-    "Term " + w).join(", ")}`, "", `#define WL_ALL e, sp, seq, rn, ${ws
++  `#define WL_SIG WL_ENV_SIG, DEV Term* sp, u32 seq, u32 rn, ${ws.map((w) =>
++    "Term " + w).join(", ")}`, "", `#define WL_ALL WL_ENV_ALL, sp, seq, rn, ${ws
+     .join(", ")}`, "",
+   `#define WL_TABLE ${entries.map((s) => `WL_X(${s.fid})`).join(" ")
+     } WL_X(FID_EXIT)`, `#define MAIN_FID ${seg_fid("main")}`,
+@@ -3360,7 +3360,18 @@ using namespace metal;
+ #define UNLOCK(l)  __atomic_store_n(&(l), 0, __ATOMIC_RELEASE)
+ #define WL_FN      static PRESERVE(preserve_none) __attribute__((noinline)) Term
+ #define WL_CASE(F) WL_FN WL_##F(WL_SIG)
++#if defined(__EMSCRIPTEN__)
++// Wasm passes a struct by a pointer to the caller's copy, which a musttail
++// call frees before the callee reads it: a segment takes Env's two words
++// and rebuilds e at WL_OPEN.
++#define WL_ENV_SIG DEV u64* wl_mem, DEV u64* wl_alc
++#define WL_ENV_ALL e.mem, e.alc
++#define WL_OPEN    { Env e = { wl_mem, wl_alc }; WL_BANK u32 rn;
++#else
++#define WL_ENV_SIG Env e
++#define WL_ENV_ALL e
+ #define WL_OPEN    { WL_BANK u32 rn;
++#endif
+ #define WL_JMP(F)  __attribute__((musttail)) return WL_##F(WL_ALL)
+ #define WL_DYN(F)  __attribute__((musttail)) return wl_tab[F](WL_ALL)
+ #endif
+@@ -3388,11 +3399,20 @@ using namespace metal;
      STK(wi) = e.mem[A + wi]; \
    } \
    sp += (N - 1) * LANE_STEP;
@@ -83,7 +123,7 @@ index df6d538..9845a4c 100644
 
  // Types
  // =====
-@@ -3537,6 +3546,9 @@ static CUfunction gpu_pso;
+@@ -3537,6 +3557,9 @@ static CUfunction gpu_pso;
  #endif
  static bool io_gpu;
  static DEV Term*  io_stk;
@@ -93,7 +133,7 @@ index df6d538..9845a4c 100644
 
  static const char* CLI_HELP =
    "usage: %s [options] [arguments]\n"
-@@ -4678,10 +4690,26 @@ static void* pool_mmap(u64 bytes) {
+@@ -4678,10 +4701,26 @@ static void* pool_mmap(u64 bytes) {
  }
 
  // The machine stack of each thread; -D BEND_STACK_BYTES=... changes it.
@@ -120,7 +160,7 @@ index df6d538..9845a4c 100644
  static Term* pool_stack(void) {
    u64   len = BEND_STACK_BYTES;
    char* p   = pool_mmap(len + 16384 + SIGSTKSZ);
-@@ -4695,6 +4723,7 @@ static Term* pool_stack(void) {
+@@ -4695,6 +4734,7 @@ static Term* pool_stack(void) {
    sigaction(SIGBUS, &sa, NULL);
    return (Term*)p;
  }
@@ -128,7 +168,7 @@ index df6d538..9845a4c 100644
 
  // A wait yields a while before it sleeps, so a turn that ends (or follows)
  // within microseconds never pays a condvar wake.
-@@ -5186,7 +5215,12 @@ static void cube_run(u64* H, bool gpu) {
+@@ -5186,7 +5226,12 @@ static void cube_run(u64* H, bool gpu) {
 
  static u64 corpus_size;
 
@@ -142,7 +182,7 @@ index df6d538..9845a4c 100644
  #ifndef BEND_CORPUS_BYTES
  #define BEND_CORPUS_BYTES (1ull << 33)
  #endif
-@@ -5231,6 +5265,11 @@ static void corpus_lay(u64* H, u64 size) {
+@@ -5231,6 +5276,11 @@ static void corpus_lay(u64* H, u64 size) {
  }
 
  static bool corpus_grow(u64* H, u64 need) {
@@ -154,7 +194,7 @@ index df6d538..9845a4c 100644
    bool ok = true;
    LOCK(bank_lock);
    while (ok && need > a32_load(a32_at(H, H_CAP))) {
-@@ -5384,6 +5423,10 @@ OUTLINE void* io_mem(void* mem) {
+@@ -5384,6 +5434,10 @@ OUTLINE void* io_mem(void* mem) {
  }
 
  static int io_sys_addr(const char* host, u32 port, struct sockaddr_in* at) {
@@ -165,7 +205,7 @@ index df6d538..9845a4c 100644
    memset(at, 0, sizeof(*at));
    at->sin_family = AF_INET;
    at->sin_port   = htons((uint16_t)port);
-@@ -5453,6 +5496,12 @@ static void io_park_add(IoWork* w) {
+@@ -5453,6 +5507,12 @@ static void io_park_add(IoWork* w) {
  }
 
  static Term io_wait_on(IoWork* w, int fd, short evts, u64 time, IoPack more) {
@@ -178,7 +218,7 @@ index df6d538..9845a4c 100644
    w->word = (u32)fd;
    w->pack = more;
    w->time = time;
-@@ -5644,6 +5693,12 @@ static void* io_help(void* arg) {
+@@ -5644,6 +5704,12 @@ static void* io_help(void* arg) {
  }
 
  static Term io_work(IoWork* w, IoCall call, IoPack pack) {
@@ -191,7 +231,7 @@ index df6d538..9845a4c 100644
    w->call  = call;
    w->pack  = pack;
    io_busy += 1;
-@@ -6000,6 +6055,13 @@ int main(int argc, char** argv) {
+@@ -6000,6 +6066,13 @@ int main(int argc, char** argv) {
        io_argv[io_argc++] = argv[i];
      }
    }

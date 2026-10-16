@@ -249,7 +249,7 @@ past its end; so no new stack probe was needed beyond `probe/deep.bend`.
 Every program of `tests/differential/corpus.txt` built with the
 `w32-patched` flags and run under the SDK's Node, compared byte for byte
 (stdout and exit code) with the native lane of `tests/differential/run.sh`
-(not part of the harness yet; that is t-tidzr2vk): **48 of 51 match.**
+(before its wasm lane, TODO item t-tidzr2vk): **48 of 51 match.**
 
 | Program | wasm32 | First diff line (native) |
 | --- | --- | --- |
@@ -263,9 +263,27 @@ fails the same programs (`nat_chain` out of memory, `bst_insert` and
 1 GiB corpus or a 256 MiB stack does not help. The native binaries of the
 same C built with `-D__EMSCRIPTEN__` (patch 0002's paths: one worker, no
 growth, 8 MiB stack checked) print the native output, so wasm runs these
-programs differently; finding why belongs to the wasm lane.
+programs differently.
 
-Stack size: the 48 programs that run match native with any stack from
+The cause (t-tidzr2vk, 2026-10-16): segments are functions entered by
+`musttail` (`WL_JMP`, `WL_DYN`) whose first parameter, `Env e` (two
+pointers, `WL_SIG`), is a struct. Clang's wasm32 and wasm64 ABI pass a
+struct argument by a pointer to a copy in the caller's frame; a tail call
+frees that frame before the callee reads it, so a segment read an Env
+whose stack slot later calls had overwritten. Built with
+`-sASSERTIONS=2 -sSAFE_HEAP=1 -fsanitize=undefined -g`, `nat_chain`
+reports `load of address 0x00000008` in `heap_alloc` (`ALC_AT(e, cls)`
+with `e.alc` 0) and `subtraction of unsigned offset from 0x00000000` in
+`heap_alloc_miss` and `bank_pop`, called from `WL_FID_U32_SHOW_GO`: with
+`e.alc` 0 the free chains were read from address 0, which wasted the
+corpus (out of memory) or corrupted terms. Native targets pass the two
+words in registers, so the same C with `-D__EMSCRIPTEN__` was correct.
+Patch 0002 now passes Env's two words under Emscripten (`WL_ENV_SIG`,
+`WL_ENV_ALL`) and rebuilds `e` at `WL_OPEN`; native builds expand to the
+same `Env e` as before. With it all 51 programs match native on the
+wasm lane of `tests/differential/run.sh`.
+
+Stack size (before the fix above): the 48 programs that ran matched native with any stack from
 2^9 bytes up; at 2^8, `float_printing` and `fork_shared_flat` stop with
 the stack overflow error, and at 2^7 and 2^6 more programs do, every one
 with that error, never with wrong output.
