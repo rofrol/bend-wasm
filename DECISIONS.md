@@ -54,3 +54,31 @@ for 2,000 bodies (budget 8 ms), with state hashes equal to the native build.
 So no patch; per `docs/plan.md` wasm is now an experiment, not a roadmap.
 The consult round `20261016-124353-d5c1` patch shape stays recorded in git
 history of `TODO.md` should the question return.
+
+## Wasm approach (d-fus365v2)
+
+The user decided 2026-10-16: wasm is a must, the coordinator owns it, ask
+the models. Consult round `20261016-125354-86b1` (sol, mimo, deepseek,
+argon, wonder; all answered) agreed on the approach; the coordinator
+checked its claims against `vendor/bend/bend2/comp.ts` and chose it:
+
+- a separable patch series on the pinned Bend, applied to a cached copy:
+  portable limits (unguarded, upstreamable), an Emscripten platform patch
+  (wasm32, fixed corpus without in-place growth, explicit stack bound, one
+  worker, unsupported IO failing loudly), and a library mode in the emitter
+  as its own patch; never edits to generated C;
+- prove persistent state across calls (bounded heap over 100,000 calls)
+  before building the game bridge, with a kill criterion;
+- JS holds opaque generation-checked handles, never raw terms; render data
+  goes through a fixed exported F32 region with memory growth off;
+- conformance: identical stdout and exit codes on the harness, identical
+  state hashes and render bytes on Robokill's replays; the switch is
+  Robokill's (its decision 0003): only if conformant and faster than the
+  JS lane (p95 1.09 ms at 2,000 bodies).
+
+Checked in the code: the runtime has no tracing GC but frees affine values
+and refcounts shared ones (`comp.ts` 4060-4120), so a per-frame leak is not
+a given but must be measured; F32 arrays are contiguous u32 blocks, so a
+zero-copy F32 view is possible. Dismissed: raw 64-bit terms as JS handles
+(argon), unsafe once a term moves or is freed; "arrays are trees" (argon),
+wrong for this runtime.
