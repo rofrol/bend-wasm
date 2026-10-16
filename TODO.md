@@ -16,6 +16,9 @@ Plan and context: `docs/plan.md`.
   `BEND_LIB_SLOTS` 4096) ends the process with `_exit(1)`, an unhandled
   `ExitStatus` in Node; decide here, with the trap rule, whether the glue
   turns it into a thrown JS error and a poisoned instance.
+  The user 2026-10-16: "test Robokill in Bend as you see fit": the
+  coordinator chooses how to run the Chrome benchmark (headless or a
+  separate Chrome instance with its own temporary profile) without asking.
 - [ ] Offer the patch series upstream on [t-yuiyk4uz]
   https://github.com/bendlang/bend/issues/1598 (the user approves the text
   first).
