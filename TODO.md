@@ -58,13 +58,31 @@ Plan and context: `docs/plan.md`.
   and how much of the corpus a run actually touches (measure). End with
   the smallest patch shape for (a) a CPU-sized layout or (e) a split heap,
   and (b) a corpus without Emscripten's memset, with risks; no code change.
-- [ ] Patch 0004 (or an extension of 0002), wasm memory, from the audit: [t-xes4fk35]
-  CPU-sized layout under `__EMSCRIPTEN__`, the corpus from fresh linear
-  memory without a memset, a fixed corpus sized from a stress run (the
-  worst Robokill states, not the steady 39,040 words) with stated headroom
-  and an explicit exhaustion error, `INITIAL_MEMORY` lowered to match.
-  Gates: differential, negative, replay (hashes and render bytes), heap
-  bound, deliberate exhaustion and lane-boundary tests the audit names.
+- [ ] Wasm memory, step 1 (decided by the coordinator from the audit [t-uyjzq4hq]
+  `docs/memory.md`, run r-clpmphs4): fix patch 0001's corpus placement on
+  32-bit pointers (on wasm32 `(void*)hint` truncates hints 2^45..2^32 to
+  NULL, `mmap(NULL)` succeeds, the loop unmaps and halves: 14 maps and
+  memsets of 512 MiB in `bend_init`, about 140 ms; checked by the
+  coordinator in the patched `comp.ts` 5621-5640): try a hint only when it
+  fits a pointer; and under `__EMSCRIPTEN__` take the corpus and the Term
+  stack from static zeroed storage (`.bss`, no `mmap`, no memset), as the
+  audit's prototype did (Node RSS after the replay 573 to 53 MiB,
+  `bend_init` 140 to 0 ms, hash unchanged). Only the header `[0, ALC_OFF)`
+  and the ring get/put counters need zero (audit: garbage elsewhere gives
+  identical output). Gates: differential, negative, replay, heap bound;
+  Node RSS and `bend_init` time reported. [t-xes4fk35]
+- [ ] Wasm memory, step 2 (from the same audit): under `__EMSCRIPTEN__` a [t-fkta2jvt]
+  host layout without the device-only areas (ALC rows 8 MiB, Term stacks
+  256 MiB; the host keeps `ALC[w]` static and stacks in `pool_stack`),
+  rings only when `BANGS != 0` (fork programs use many rings, assigned per
+  task; 28 measured with one worker), `corpus_lay`'s `> CUBE` (a GPU
+  requirement) not applied on the host; then a corpus sized from a stress
+  run of Robokill's worst states with stated headroom and an explicit
+  exhaustion error, and `INITIAL_MEMORY` lowered to match (the audit puts
+  Robokill's minimum near 331 KiB before headroom). Not a smaller
+  `CUBE_T` (changes `!` fork order; `RING_WORDS` and `RING_LOG`'s 17 are
+  tied to 128). Gates as step 1 plus the audit's lane-boundary,
+  ring-near-full, stack-near-limit and exhaustion tests.
 - [ ] Memory measurement in the benchmark: report [t-2lsz77ug]
   `WebAssembly.Memory.buffer.byteLength`, `measureUserAgentSpecificMemory`
   and the renderer process's resident footprint from the OS (macOS), each
