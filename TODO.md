@@ -50,6 +50,15 @@ Plan and context: `docs/plan.md`.
   words); Windows x64 also passes 16-byte structs indirectly and may hit
   the same, unchecked.
 
+- [ ] Requested by the user 2026-10-16: "bring in that loop as work to do, [t-ayhexs3c]
+  the one from the fast-code-llm space; ask the models": an autoresearch
+  loop like fast-code-llm's (`~/personal_projects/fast-code-llm/loop/`,
+  its decision 0001: agents propose one patch, a gate of byte identity and
+  laws on a per-run random corpus, a paired deterministic score, an
+  append-only locked JSONL ledger with start and verdict records, seeds with
+  known verdicts proving the gate rejects bad candidates), adapted to
+  bend-wasm. Shape decided after a consult round; recorded here.
+
 ## Needs a decision
 
 ## Proposed
