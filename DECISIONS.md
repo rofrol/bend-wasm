@@ -112,3 +112,14 @@ with a "Retired by:" header) go on a cached copy of the pin,
 `.toolchain/<pin>-<series hash>`, published by rename; `BEND_PATCH=0` runs
 the pin; `scripts/check-patches` is the herdr check `patches`. Convention in
 `patches/README.md` and `docs/workflow.md`.
+
+## Patch 0001, portable limits (t-sljw6rhm)
+
+Done 2026-10-16 (run r-zyipygvj): `patches/0001-portable-limits.patch`
+adds `BEND_CORPUS_BYTES` and `BEND_STACK_BYTES` (`-D` knobs, native
+defaults), `size_fit` (an explicit "a size past the address space" error
+instead of truncating any u64 length to size_t) and a `mmap(NULL)` fallback
+in `corpus_map`. Native is byte-identical (the differential harness, with
+and without the patch). Effect: wasm64 probe programs match native; wasm32
+fails explicitly by default and matches native with a 512 MiB corpus and an
+8 MiB stack. Open points went into TODO (t-vnargpue, t-h3ak74p5).

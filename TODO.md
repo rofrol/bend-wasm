@@ -4,11 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Patch 0001, portable limits (unguarded, upstreamable): `SIZE_MAX` [t-sljw6rhm]
-  checks on every u64-to-size_t length, `mmap(NULL)` when the hinted
-  mapping fails, compile-time knobs for corpus and stack size with today's
-  native defaults. Check: the differential harness, native vs JS lane,
-  unchanged with and without the patch.
 - [ ] Follow-up of t-u66qb3n7: the patch recipe in `patches/README.md` [t-vnargpue]
   (`git diff`) leaves a single space on empty context lines, which the
   `whitespace` check rejects; make the recipe produce patches that pass
