@@ -21,11 +21,16 @@ browser, CPU only; rendering stays in the host page (WebGPU).
   cuda/nvrtc; platform guards in `bend2/comp.ts` exist only for
   `__APPLE__` and `__linux__`. Which bodies are unconditional is not yet
   known.
-- Runtime: 64-bit words, one heap (mmap) shared by cores and GPU, no GC,
-  no C stack, a work-stealing scheduler over pthreads; IO effects are defs
-  importing a `.js` file and a `.c` twin.
+- Runtime: 64-bit words, one heap (mmap) shared by cores and GPU, no
+  tracing GC, but affine values are freed and shared ones are refcounted
+  (`heap_alloc`/`heap_free`, `term_keep`/`term_drop`;
+  `vendor/bend/bend2/comp.ts` 4060-4120); F32 arrays are contiguous u32
+  blocks (BUF, 2^c u32); no C stack, a work-stealing scheduler over
+  pthreads; IO effects are defs importing a `.js` file and a `.c` twin.
 
 ## Approach (consult round `20261016-121009-6b8e`, five models agreed)
+
+The current wasm approach: `docs/decisions/0001-wasm-through-a-patched-emitter.md`.
 
 1. **Out-of-tree probe first.** `bend -o x.c`, then Emscripten with build
    flags and, where needed, `-isystem` shim headers; no edits to generated C.
