@@ -11,6 +11,10 @@ Plan and context: `docs/plan.md`.
   JS lane; rerun the Chrome benchmark after the memory patch.
   This run freezes the emcc baseline for the clang cutover criteria
   (shipped wasm and JS sizes raw and gzip, linear memory, Chrome p95).
+  Code landed 2026-10-16 (run r-2mymemna): memory marks after init and
+  after the replay (linear memory, measureUserAgentSpecificMemory, renderer
+  RSS and footprint), summary medians and out/baseline.json; check.sh
+  passed outside the sandbox (coordinator). Open: the Chrome run itself.
 - [ ] Browser-only shipped glue (from the Node question): build the shipped [t-3wp2nvda]
   module with `-sENVIRONMENT=web` (and `-sFILESYSTEM=0` if nothing uses a
   file system), audit `step.wasm.mjs` and the Emscripten glue for
