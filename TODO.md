@@ -21,6 +21,13 @@ Plan and context: `docs/plan.md`.
 
 ## Needs a decision
 
+- [ ] Register a first `.herdr/checks.toml` so `herdr todo run` can dispatch [t-hrqgssgq]
+  workers (the driver refuses a run without at least one registered check,
+  herdr `src/workers/runs.rs:947`; this repository has no checks file yet)?
+  Options: the coordinator commits `whitespace = ["git", "diff", "--check", "HEAD^", "HEAD"]` as in roagent's `.herdr/checks.toml`, later items add their own checks | the user writes the file | no herdr dispatch, the coordinator does the items itself
+  Checked: no `.herdr/` in the repository; `herdr todo run --help` lists
+  `--check NAME...` as required.
+
 - [ ] Open the upstream issue at https://github.com/bendlang/bend with the [t-ymygf5au]
   outline in `docs/plan.md`, once the probe has its first errors?
   Options: yes, after the probe | not yet | never
