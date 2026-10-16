@@ -116,6 +116,16 @@ Plan and context: `docs/plan.md`.
     patches that hurt the upstream offer (a diff-size cap).
   Split into worker items when its prerequisites are done.
 
+- [ ] Requested by the user 2026-10-16: "on this machine this test does not [t-xqgdbzz2]
+  pass now: fix it; ask the models". `probe/web/run.sh` fails on this Mac:
+  headless Chrome 155 (`--headless=new --dump-dom`) renders the page
+  correctly (hello: exit 0, stdout "Hello, world!" in the dumped DOM) but
+  exits 2 at teardown; its log ends with "Trying to load the allocator
+  multiple times. This is *not* supported." and "Teardown watchdog expired;
+  recording dump and terminating." Seen on run r-mqzurb3s's tree, which
+  does not touch `probe/`; find the cause (Rule 10: no longer timeout, no
+  retry) and fix it so the check passes.
+
 ## Needs a decision
 
 ## Proposed
