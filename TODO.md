@@ -4,14 +4,11 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Open the upstream issue at https://github.com/bendlang/bend with the [t-ymygf5au]
-  outline in `docs/plan.md`, once the probe has its first errors?
-  Decided by the user 2026-10-16 (d-kznksmaz): yes, after the probe; the
-  coordinator shows the issue text for approval before posting.
-
 - [ ] Differential test harness: one script builds a corpus native, JS lane and [t-ucc65gif]
   wasm and diffs stdout and exit code; start with at least 20 deterministic
   programs from Bend's own tests; list exclusions with reasons.
+  Decided by the user 2026-10-16 (d-lx22tkg5): start now with native and
+  JS lane only; wasm joins once a wasm build runs (t-xwj7ptut).
 
 ## Needs a decision
 
@@ -32,6 +29,10 @@ Plan and context: `docs/plan.md`.
   has no `step` yet (only `docs/`, `binaries/`, `tools/`), so the value
   check cannot run today.
   Options: wait for the JS-lane value check on Robokill's step | patch now as an experiment, the minimal set above | no patches, upstream only
+  Decided by the user 2026-10-16 (d-2dcnim2c): wait for the JS-lane
+  benchmark of Robokill's `step`; patch only if it misses the frame budget.
+  Ask again once Robokill has a `step` to benchmark, or when
+  https://github.com/bendlang/bend/issues/1598 is answered.
 
 - [ ] If the probe allows it: a CPU-only single-worker build of the pure [t-xwj7ptut]
   program runs under Node and in a browser page without cross-origin

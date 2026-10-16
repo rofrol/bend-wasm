@@ -36,3 +36,10 @@ Whether to patch `comp.ts` goes back to the user (t-3oqripea).
 Done 2026-10-16 (run r-6ec5gs2q): `docs/workflow.md` says the coordinator
 checks out `vendor/bend` in herdr's worker folder before dispatch and after a
 pin move, since workers have no network.
+
+## Upstream issue (t-ymygf5au)
+
+Opened 2026-10-16 after the user approved the text (d-lmevgpkg):
+https://github.com/bendlang/bend/issues/1598, with the probe's facts and the
+questions from `docs/plan.md` (scope, guard macro or flag, single-thread
+mode, heap knob with `mmap(NULL)`, JS-only effect seam).
