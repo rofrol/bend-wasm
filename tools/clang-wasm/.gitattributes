@@ -1,0 +1,4 @@
+# Vendored sources stay byte-identical to the SDK's, trailing whitespace
+# included (musl/README.md, compiler-rt/README.md).
+musl/** -whitespace
+compiler-rt/** -whitespace

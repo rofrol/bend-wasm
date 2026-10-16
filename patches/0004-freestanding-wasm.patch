@@ -1,8 +1,8 @@
 A freestanding wasm32 build of the C runtime template (bend2/comp.ts),
 for plain clang --target=wasm32 -nostdlib with wasm-ld and no emcc
-(bend-wasm's tools/clang-wasm/build.sh, TODO t-fwjpak4c step B). All of it
-is under one guard, BEND_WASM_FREESTANDING; without it the C is the same
-as before, so native and emcc builds do not change.
+(bend-wasm's tools/clang-wasm/build.sh, TODO t-fwjpak4c steps B and C).
+All of it is under one guard, BEND_WASM_FREESTANDING; without it the C is
+the same as before, so native and emcc builds do not change.
 
 - The guard defines __EMSCRIPTEN__ before the includes, so the build takes
   patch 0002's wasm path as it is (two-word Env through musttail, WL_ROOM,
@@ -18,17 +18,17 @@ as before, so native and emcc builds do not change.
   the one worker, and traps where only a second thread or a parked request
   could lead (pthread_cond_wait, the wake pipe's read, select).
 - The host's part is named imports of one module, "bend": write(fd, data,
-  len), exit(code) and now() (monotonic ns). The F32 text's formatter
-  (fmt_fp, for %e and %f), strtof, strtod and the math functions the
-  emitter can call (exp log log2 log10 sin cos tan asin acos atan sinh
-  cosh tanh atan2 pow fmodf) are imports too, which the host makes trap
-  until they come from vendored musl (step C).
+  len), exit(code) and now() (monotonic ns). The math functions the
+  emitter can call, strtof, strtod and the formatter of %e and %f
+  (bend_fmt_fp, which this patch declares) come from musl sources the
+  build links (bend-wasm's tools/clang-wasm/musl, step C), never from the
+  host.
 
 Retired by: an upstream freestanding wasm target of Bend's C runtime
 (https://github.com/bendlang/bend/issues/1598).
 
 diff --git a/bend2/comp.ts b/bend2/comp.ts
-index d669425..cea7a48 100644
+index d669425..b6dad5b 100644
 --- a/bend2/comp.ts
 +++ b/bend2/comp.ts
 @@ -3639,4 +3639,13 @@ const runtime_c = (tabs: string, spins: string, segs: string,
@@ -45,7 +45,7 @@ index d669425..cea7a48 100644
 +#endif
  #ifdef __APPLE__
  #define _DARWIN_UNLIMITED_SELECT
-@@ -3673,4 +3682,576 @@ using namespace metal;
+@@ -3673,4 +3682,559 @@ using namespace metal;
  #endif
 
 +#ifdef BEND_WASM_FREESTANDING
@@ -60,9 +60,10 @@ index d669425..cea7a48 100644
 +//     many it took (it may take part), or < 0 for an error
 +//   exit(code: i32)    ends the run (_exit, exit); never returns
 +//   now() -> i64       monotonic nanoseconds (CLOCK_MONOTONIC: IO.now)
-+// and, until they come from vendored musl, ones that trap if called:
-+// fmt_fp (printf's %e and %f), strtof, strtod and the math functions
-+// (BEND_MATH). stdout and stderr are unbuffered: each write goes out at
++// The build links musl's own code, never the host's, for the rest: the
++// math functions, strtof and strtod, and bend_fmt_fp, musl's formatter of
++// printf's %e and %f (bend-wasm's tools/clang-wasm/musl, the same sources
++// emcc links). stdout and stderr are unbuffered: each write goes out at
 +// once, so fflush has nothing to do. malloc serves only the host side
 +// (IO buffers, the glue's scratch words): blocks from __heap_base up,
 +// reused through free lists, and memory.grow when memory runs out, which
@@ -85,28 +86,10 @@ index d669425..cea7a48 100644
 +BEND_HOST(write) int bend_host_write(int fd, const void* data, size_t len);
 +BEND_HOST(exit) __attribute__((noreturn)) void bend_host_exit(int code);
 +BEND_HOST(now) long long bend_host_now(void);
-+BEND_HOST(fmt_fp) int bend_host_fmt_fp(char* out, int cap, double v,
-+  int prec, int conv);
-+BEND_HOST(strtof) float bend_host_strtof(const char* s, char** end);
-+BEND_HOST(strtod) double bend_host_strtod(const char* s, char** end);
 +
-+#define BEND_MATH1(N) BEND_HOST(N) double bend_host_##N(double x); \
-+  double N(double x) { return bend_host_##N(x); }
-+#define BEND_MATH2(T, N) BEND_HOST(N) T bend_host_##N(T x, T y); \
-+  T N(T x, T y) { return bend_host_##N(x, y); }
-+BEND_MATH1(exp) BEND_MATH1(log) BEND_MATH1(log2) BEND_MATH1(log10)
-+BEND_MATH1(sin) BEND_MATH1(cos) BEND_MATH1(tan) BEND_MATH1(asin)
-+BEND_MATH1(acos) BEND_MATH1(atan) BEND_MATH1(sinh) BEND_MATH1(cosh)
-+BEND_MATH1(tanh) BEND_MATH2(double, atan2) BEND_MATH2(double, pow)
-+BEND_MATH2(float, fmodf)
-+
-+float strtof(const char* restrict s, char** restrict end) {
-+  return bend_host_strtof(s, end);
-+}
-+
-+double strtod(const char* restrict s, char** restrict end) {
-+  return bend_host_strtod(s, end);
-+}
++// The text of v by conv 'e' or 'f' at precision prec into out (cap bytes,
++// no NUL); its whole length, more than cap when it did not fit, or -1.
++int bend_fmt_fp(char* out, int cap, double v, int prec, int conv);
 +
 +_Noreturn void _exit(int code) {
 +  bend_host_exit(code);
@@ -504,7 +487,7 @@ index d669425..cea7a48 100644
 +      }
 +      case 'e':
 +      case 'f': {
-+        int n = bend_host_fmt_fp(tmp, sizeof tmp, va_arg(ap, double),
++        int n = bend_fmt_fp(tmp, sizeof tmp, va_arg(ap, double),
 +          prec < 0 ? 6 : prec, *p);
 +        if (n < 0 || n >= (int)sizeof tmp) {
 +          __builtin_trap();

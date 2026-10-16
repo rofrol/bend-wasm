@@ -1,6 +1,6 @@
 #!/bin/sh
 # Builds Bend's C into wasm with the pinned Emscripten SDK's plain clang
-# and wasm-ld, no emcc and no libc (TODO t-fwjpak4c, step B;
+# and wasm-ld, no emcc and no SDK library (TODO t-fwjpak4c, steps B and C;
 # docs/clang-wasm.md):
 #
 #   tools/clang-wasm/build.sh FILE.c OUTDIR NAME
@@ -10,8 +10,11 @@
 # (-std=c11 -O2 -mtail-call; its -s settings are emcc's), bulk memory, and
 # -DBEND_WASM_FREESTANDING, the guard of patch 0004, which supplies the
 # libc the runtime calls and turns on the series' wasm path; the SDK's
-# musl headers give only declarations (--sysroot, as step A). wasm-ld
-# links with --no-entry and exports:
+# musl headers give only declarations (--sysroot, as step A). The math
+# functions, strtof, strtod and printf's %e/%f come from vendored musl and
+# compiler-rt sources, which tools/clang-wasm/libc.sh builds into
+# OUTDIR/libc.a (step C). wasm-ld links the two with --no-entry and
+# exports:
 #
 # - a library (the C defines bend_init): what glue/build.sh's emcc build
 #   exports (glue/gen.mjs exports: bend_init, bend_dispose,
@@ -36,7 +39,7 @@
 # whole. emcc's own wasm-opt does the same. It also drops the name
 # section, so the tail-call check below reads the linked module.
 #
-# Writes OUTDIR/NAME.wasm, and beside it NAME.o, NAME.ld.wasm (wasm-ld's
+# Writes OUTDIR/NAME.wasm, and beside it libc.a, NAME.o, NAME.ld.wasm (wasm-ld's
 # output, with names), NAME.exports (one per line), NAME.imports
 # (module.name kind per line), NAME.dis (llvm-objdump -d of NAME.ld.wasm),
 # NAME.tail (below) and NAME.build.log. Fails when a step fails or a
@@ -83,6 +86,11 @@ done
 "$bin/clang" $cflags --sysroot="$sysroot" -c "$c" -o "$b.o" >> "$log" 2>&1 \
   || fail "compile failed (log $log)"
 
+# The libc part from vendored musl and compiler-rt sources (step C).
+lib=$out/libc.a
+sh "$root/tools/clang-wasm/libc.sh" "$lib" >> "$log" 2>&1 \
+  || fail "the libc archive failed (log $log)"
+
 if grep -q '^void bend_init(void) {$' "$c"; then
   exports=$("$node" "$root/glue/gen.mjs" exports "$c" | tr ',' '\n' \
     | sed 's/^_//') || fail "glue/gen.mjs exports failed"
@@ -99,7 +107,7 @@ for x in $exports; do
 done
 # shellcheck disable=SC2086
 "$bin/wasm-ld" --no-entry $flags -z stack-size=65536 --stack-first \
-  --initial-heap=1048576 --no-growable-memory "$b.o" -o "$b.ld.wasm" \
+  --initial-heap=1048576 --no-growable-memory "$b.o" "$lib" -o "$b.ld.wasm" \
   >> "$log" 2>&1 || fail "link failed (log $log)"
 "$bin/wasm-opt" --memory-packing "$b.ld.wasm" -o "$b.wasm" >> "$log" 2>&1 \
   || fail "wasm-opt failed (log $log)"

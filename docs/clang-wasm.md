@@ -3,8 +3,10 @@
 TODO t-fwjpak4c, step (A): what does Bend's emitted C need from a libc when
 it is compiled for wasm32 by plain clang, without emcc? This sizes steps
 (B) (mem*, allocator, printing, abort, host imports, `wasm-ld --no-entry`)
-and (C) (math from vendored musl). Step (B), the build itself, is at the
-end ("Step (B): the freestanding build").
+and (C) (math from vendored musl). Step (B), the build itself, and step
+(C), musl's math, float parsing and formatting, are at the end ("Step (B):
+the freestanding build", "Step (C): math, float parsing and formatting
+from musl").
 
 `tools/clang-wasm/inventory.sh` answers it; results in
 `tools/clang-wasm/out/` (ignored). It emits the C of the 51 programs of
@@ -208,7 +210,8 @@ investigated; it is not the path a wasm build takes.
   freestanding header or keep from the sysroot for declarations.
 - (C): the 15 double functions and `fmodf` above, plus a correct `strtof`
   and the double formatter for `%.*e`/`%.*f` (musl's `floatscan` and
-  `fmt_fp`), the latter two needed by F32 printing.
+  `fmt_fp`), the latter two needed by F32 printing (done: "Step (C)",
+  below).
 - Robokill's library alone needs only the error path (`snprintf`,
   `fprintf`, `fflush`, `_exit`, `stdout`, `stderr`) and the pool stubs.
 
@@ -227,8 +230,9 @@ tools/clang-wasm/check.sh [OUTDIR]             # the 51 programs and Robokill
 C flags (`-std=c11 -O2 -mtail-call`) and the sysroot's musl headers for
 declarations, as step (A); links with `wasm-ld --no-entry --export=...`;
 then runs binaryen's `wasm-opt --memory-packing` from the same SDK (below).
-No libc, compiler-rt or crt is linked, and none is needed: the link
-fails on any undefined symbol.
+No libc, compiler-rt or crt of the SDK is linked: the link fails on any
+undefined symbol. Since step (C) the module also links `libc.a`, built from
+vendored musl and compiler-rt sources ("Step (C)", below).
 
 ### The guard
 
@@ -275,26 +279,14 @@ All of module `bend`; a module imports only those its code reaches.
 | `write` | `(fd i32, data i32, len i32) -> i32` | stdout (1) and stderr (2): the bytes taken (the runtime loops on fewer), 0 or less for an error ("a short write on a standard stream") |
 | `exit` | `(code i32)`, never returns | `_exit` (every fail-stop), `exit` (`IO.exit`) |
 | `now` | `() -> i64` | monotonic nanoseconds (`io_tick`: `IO.now`, the IO loop) |
-| `fmt_fp` | `(out i32, cap i32, v f64, prec i32, conv i32) -> i32` | `%e`/`%f` of a double (`conv` 101 or 102) into `out`, its length; F32 text. Traps until step (C) |
-| `strtof`, `strtod` | `(s i32, end i32) -> f32 / f64` | F32 text read back; `main`'s `--gpu` size. Trap until step (C) |
-| `exp log log2 log10 sin cos tan asin acos atan sinh cosh tanh` | `(f64) -> f64` | F32 math. Trap until step (C) |
-| `atan2 pow` | `(f64, f64) -> f64` | the same |
-| `fmodf` | `(f32, f32) -> f32` | the same |
+
+Step (B) also had trapping stand-ins for `fmt_fp`, `strtof`, `strtod`
+and the math functions; step (C) replaced them with musl's code in the
+module, so these three are all the host gives.
 
 What the 52 modules import (`check.sh` instantiates each with stubs):
-
-- 47 programs: `write exit now`, unresolved `strtod fmt_fp`;
-- `run/float_printing`, `run/u32_mod_operator`: `write exit now`,
-  unresolved `strtof strtod fmt_fp`;
-- `reg/wnf_deep_chain`: `write exit`, unresolved `strtof strtod fmt_fp`;
-- `io/halt_utf8_law`: `write exit`, unresolved `strtod fmt_fp`;
-- Robokill's library: `write exit`, unresolved `fmt_fp`.
-
-Every module imports `fmt_fp`, because the one formatter also serves
-`snprintf` on the error path; every program imports `strtod` through
-`main`'s option parsing, and `--gpu 4GB` traps there until step (C) (emcc
-parses it and then ignores it, the program having no `!`). No module
-imports a math function.
+`write exit now` for 49 programs; `write exit` for `reg/wnf_deep_chain`,
+`io/halt_utf8_law` and Robokill's library.
 
 ### Exports
 
@@ -362,68 +354,205 @@ the SDK's Node (not committed: real `write`, `exit` and `now`, trapping
 step-(C) imports, `__wasm_call_ctors` then `__main_argc_argv`) gave the
 emcc lane's stdout, stderr and exit status for 49 of the 51 programs; the
 other two, `run/float_printing` and `run/u32_mod_operator`, trap in
-`fmt_fp`. Robokill's library run the same way (n = 500, seed 12345,
-10,000 frames) hashes 603820250, as its RESULTS.md, and a stale handle
-gives the library's message and exit 1.
+`fmt_fp` (step (C) fixed both, below). Robokill's library run the same way
+(n = 500, seed 12345, 10,000 frames) hashes 603820250, as its RESULTS.md,
+and a stale handle gives the library's message and exit 1.
 
-Sizes in bytes (`check.sh`'s `sizes.txt`; gzip -9): the plain build is 45%
-of emcc's in all (41% gzip-compressed), Robokill 67% (62%). emcc's module
-carries musl's stdio and dlmalloc; emcc also optimizes the code with
-wasm-opt -O2, which the plain build does not, so the code itself differs
-(step (A)'s note on emcc's flags holds too).
+Sizes after step (B) (`check.sh`'s `sizes.txt`; gzip -9): the plain build
+was 45% of emcc's in all (41% gzip-compressed), Robokill 67% (62%). emcc's
+module carries musl's stdio and dlmalloc; emcc also optimizes the code
+with wasm-opt -O2, which the plain build does not, so the code itself
+differs (step (A)'s note on emcc's flags holds too). The sizes with step
+(C)'s musl code are in "Step (C)", below.
+
+## Step (C): math, float parsing and formatting from musl
+
+2026-10-16, the toolchain of step (A), patch
+`patches/0004-freestanding-wasm.patch` and the vendored sources below.
+
+```
+tools/clang-wasm/libc.sh OUT.a          # the archive (build.sh calls it)
+tools/clang-wasm/math-check.sh [OUTDIR] # bit-exactness against emcc
+```
+
+The math functions the emitter can call (`exp log log2 log10 sin cos tan
+asin acos atan sinh cosh tanh atan2 pow fmodf`), `strtof`, `strtod` and
+printf's `%e`/`%f` now come from code in the module, never from the host:
+patch 0004 drops their trapping imports and declares `bend_fmt_fp`, which
+its printf calls for `%e` and `%f`. `build.sh` links the module's object
+with `OUTDIR/libc.a`, which `libc.sh` builds (and rebuilds only when a
+source or the script is newer), so a module takes only what it calls.
+
+### Sources
+
+The files emcc links for the same calls, found by emcc's own link of a
+probe that calls each (`emcc -Wl,--why-extract=...`), copied unmodified
+from the pinned SDK (`cmp`):
+
+- `tools/clang-wasm/musl/`: Emscripten's musl 1.2.6 (`system/lib/libc/musl`),
+  56 files and `COPYRIGHT`; the list, per function, is its `README.md`.
+  `strtof`/`strtod` are musl's `floatscan`; `%e`/`%f` is `fmt_fp` of
+  Emscripten's `vfprintf.c`, which formats `long double` at double
+  precision, as emcc's printf does.
+- `tools/clang-wasm/compiler-rt/`: 32 files of compiler-rt's builtins
+  (`system/lib/compiler-rt`, Apache 2.0 with LLVM Exceptions), the
+  binary128 soft-float routines `floatscan` needs: its `long double` is
+  binary128 on wasm32, as under emcc, which links the same routines from
+  its `libclang_rt.builtins.a`. Its `README.md` lists them.
+- `tools/clang-wasm/libc/`, ours: `features.h` and an empty `syscall.h`,
+  the two internal headers musl's sources include that are not vendored
+  (the public headers are the sysroot's); `fmt_fp.c`, which includes
+  `vfprintf.c` for its static `fmt_fp` and defines `bend_fmt_fp` over a
+  `FILE` that collects bytes (the rest of `vfprintf.c` is dead and the
+  linker drops it); `uflow.c`, a trapping `__uflow`, which only a scan of a
+  real `FILE` reaches.
+
+`.gitattributes` exempts the vendored directories from the whitespace
+check, so they stay byte-identical (`vfprintf.c` and `floatscan.c` have
+trailing blanks).
+
+### Flags
+
+`libc.sh` compiles with `--target=wasm32 -nostdlib -mbulk-memory
+-mtail-call -O2 -fno-builtin -ffp-contract=off -fno-fast-math -w` and the
+sysroot's headers; musl's files also with `-std=c11 -D__EMSCRIPTEN__
+-D_XOPEN_SOURCE=700`, compiler-rt's with `-DNDEBUG`.
+
+- From emcc's build of its libc (`tools/system_libs.py`): `-fno-builtin`
+  (clang must not replace musl's own calls, such as `scalbn`, by builtins
+  or fold them), `-D_XOPEN_SOURCE=700`, `-O2` (emcc uses `-O2` for its math
+  files and `-Os` for the rest; the optimization level does not change
+  IEEE results here), and `__EMSCRIPTEN__`, which Emscripten's musl tests
+  (`libm.h`, `stdio_impl.h`, `vfprintf.c`, and `fabs`, `floor`, `sqrt` as
+  wasm instructions on `__wasm__`).
+- `-ffp-contract=off -fno-fast-math`: no contraction into fused
+  multiply-add and no reassociation or other value-changing rewrite, each
+  of which would change a result's rounding. They are clang's defaults for
+  wasm32, which has no fma instruction; the flags keep the guarantee if a
+  default changes.
+- `-std=c11` for emcc's `-std=c99`: before C11 the sysroot's `stdio.h`
+  defines a placeholder `struct _IO_FILE`, which `stdio_impl.h` then
+  redefines; emcc's libc build puts musl's `src/include/stdio.h` first,
+  which prevents that. Nothing in these files differs between the two.
+- `-w`: the warnings are musl's and compiler-rt's own.
+
+### Bit-exactness
+
+`math-check.sh` (about 15 seconds) builds `tools/clang-wasm/math-check.c`
+twice: with `scripts/emcc` and `scripts/wasm-flags`, as the emcc lane builds
+a program (so with emcc's musl), and with plain clang and `libc.sh`'s
+archive. `math-check.mjs` then calls both, passing values as their bits
+(a JS number need not keep a NaN's payload), and compares:
+
+- each unary function over the edge vectors (±0, ±inf, quiet and
+  signalling NaNs with payloads, the smallest and largest subnormals,
+  ±`DBL_MIN`, ±`DBL_MAX`, overflow and underflow limits of `exp`, `sinh`,
+  `cosh`, F32 limits, multiples of π/2 and π/4 from −12 to 12 and near
+  10^3 to 10^100 and 2^20 to 2^52, each also one and two ulps either side)
+  and 14,000 seeded random values (random bits, and uniform in ±10, ±1000,
+  ±1 and over all magnitudes): 15,549 calls each;
+- `atan2` and `pow` over the cross product of 53 edge values and 10,000
+  random pairs, `pow` also over 10,000 pairs of bases and exponents near 1,
+  negative bases with integer exponents and large exponents; `fmodf` over
+  the cross product of 47 float edges and 17,000 random pairs;
+- `strtof` and `strtod` (the bits and the bytes taken) over 38,578 strings:
+  edge texts (signs, `inf`, `infinity`, `nan(...)`, hex floats, overflow,
+  underflow, the subnormal and `DBL_MAX` boundaries, the known hard cases,
+  leading blanks, trailing junk, empty and partial texts, 800-digit
+  texts), and for 2,500 random doubles and 2,500 random floats their
+  shortest, 17- and 9-digit texts, the exact decimal halfway point to the
+  next value up (texts up to 1,077 characters), its negation, a text just above it and
+  one just below;
+- `%.*e` and `%.*f` (the bytes) of every double above and 5,000 more at
+  precisions 0 to 60, and exact ties (odd multiples of 2^−k at precision
+  k − 1, and values such as 125, 2.5, 0.5, 2^60 at precisions 0 to 20):
+  237,332 calls.
+
+Result: all 571,452 calls give the same bits and bytes in both builds.
+The check finds what it should: a plain build with `cos` replaced by a
+shifted `sin` differs in 8,368 `cos` calls, one with `strtof` as
+`(float)strtod` (double rounding) in 1,339 `strtof` calls (the halfway
+texts), one formatting `v * (1 + 2^-52)` in 89,206 `%e`/`%f` calls
+(throwaway mutants, not committed).
+
+### Programs
+
+A throwaway run in the SDK's Node, the same runner as step (B) (not
+committed: real `write`, `exit` and `now`, `__wasm_call_ctors` then
+`__main_argc_argv`), of the 51 programs built by `check.sh`: all 51 give
+the emcc lane's stdout, stderr and exit status, without arguments and with
+`--gpu 4GB`, which no longer traps (`strtod`). `run/float_printing` and
+`run/u32_mod_operator`, which trapped in step (B), print what emcc's build
+prints. Two clean builds of `run/float_printing` (`libc.a` and the module)
+are byte-identical. Robokill's library was not run again: it gained only
+`fmt_fp` on its error path.
+
+### Sizes
+
+`check.sh` (about 4 minutes): all 52 build and validate, and import only
+`write exit now`. Sizes in bytes (`sizes.txt`; gzip -9): the plain build
+is 86% of emcc's in all (80% gzip-compressed), Robokill 82% (78%); after
+step (B) it was 45% (41%) and 67% (62%).
+
+The growth is the musl code: every program takes `strtod` through `main`'s
+option parsing (`--gpu`), and with it `floatscan` and the binary128
+routines, 18,596 bytes of code in `run/nat_native`; every module takes
+`fmt_fp` through the one formatter, which also serves `snprintf` on the
+error path, 5,237 bytes (`llvm-nm -S`). The archive itself is 95 KiB; no
+module links a math function, as none calls one (step (A)).
 
 | Program | plain | emcc | plain gzip | emcc gzip |
 |---|--:|--:|--:|--:|
-| `run_nat_native` | 19485 | 50641 | 8951 | 23637 |
-| `run_nat_add_infix` | 21299 | 52278 | 9451 | 24143 |
-| `run_nat_overflow` | 19469 | 50578 | 8938 | 23621 |
-| `reg_nat_chain` | 19819 | 50970 | 9152 | 23815 |
-| `reg_nat_table` | 19467 | 50625 | 8939 | 23624 |
-| `run_word_arithmetic` | 19465 | 50623 | 8946 | 23628 |
-| `run_word_div_mod` | 19465 | 50623 | 8942 | 23624 |
-| `run_word_wrap_chains` | 19465 | 50623 | 8946 | 23628 |
-| `run_word_bitwise_literals` | 19465 | 50623 | 8950 | 23632 |
-| `run_u32_mod_operator` | 25148 | 56622 | 10729 | 25608 |
-| `eval_bit_adder` | 19465 | 50623 | 8939 | 23620 |
-| `run_float_arithmetic` | 19465 | 50623 | 8947 | 23628 |
-| `run_float_printing` | 25567 | 57065 | 10760 | 25666 |
-| `run_float_specials` | 19465 | 50623 | 8945 | 23626 |
-| `run_float_text_roundtrip` | 19467 | 50625 | 8950 | 23634 |
-| `run_computed_match` | 19479 | 50635 | 8947 | 23636 |
-| `run_state_machine` | 21728 | 52791 | 9602 | 24231 |
-| `run_expr_interpreter` | 24901 | 55613 | 9809 | 24529 |
-| `run_bst_insert` | 23577 | 54441 | 10293 | 24956 |
-| `run_overuse_clone` | 25277 | 55914 | 10098 | 24753 |
-| `run_spare_reuse` | 21299 | 52278 | 9448 | 24142 |
-| `eval_either_suite` | 25436 | 56039 | 10176 | 24818 |
-| `eval_maybe_ops` | 23237 | 53983 | 9891 | 24524 |
-| `eval_tuple_suite` | 21301 | 52280 | 9452 | 24143 |
-| `reg_match_value_literal_arm` | 21022 | 51934 | 9228 | 23932 |
-| `run_insertion_sort` | 24776 | 55602 | 10317 | 24999 |
-| `run_sieve_eratosthenes` | 20295 | 51449 | 9199 | 23893 |
-| `run_binary_search` | 21179 | 52303 | 9521 | 24229 |
-| `run_fuel_loops` | 19469 | 50627 | 8944 | 23625 |
-| `eval_deep_thunk_chain` | 19539 | 50630 | 8966 | 23666 |
-| `run_list_map_fold_ops` | 103834 | 126364 | 24008 | 37224 |
-| `reg_wnf_deep_chain` | 16922 | 38796 | 8136 | 19107 |
-| `run_flat_copy_share` | 19473 | 50629 | 8948 | 23634 |
-| `run_fork_shared_flat` | 30399 | 60800 | 11724 | 26374 |
-| `run_array_fork_unshare` | 36219 | 66112 | 12621 | 27175 |
-| `run_fn_capture_owns` | 26871 | 57327 | 10385 | 25043 |
-| `reg_share_tuple_global` | 25339 | 56219 | 10632 | 25202 |
-| `reg_brw_shared_fields` | 21844 | 52782 | 9753 | 24393 |
-| `reg_closure_capture_once` | 24924 | 55691 | 10080 | 24738 |
-| `reg_array_keep_cow` | 25691 | 56519 | 10969 | 25505 |
-| `run_string_algorithms` | 41951 | 71205 | 13955 | 28662 |
-| `eval_string_escape` | 25955 | 56472 | 10251 | 24925 |
-| `io_hello_print` | 19829 | 50971 | 9042 | 23720 |
-| `io_do_let_lines` | 21273 | 52257 | 9293 | 24042 |
-| `io_text_formatting` | 26045 | 56416 | 10535 | 25135 |
-| `io_chan_close_send` | 27381 | 57819 | 10905 | 25406 |
-| `io_fiber_single_join` | 31684 | 61505 | 11606 | 26008 |
-| `io_deadlock` | 23580 | 54193 | 9995 | 24513 |
-| `io_halt_utf8_law` | 16172 | 47494 | 7640 | 22377 |
-| `io_nat_host_bounds` | 27525 | 58254 | 10175 | 24867 |
-| `io_nat_host_neg` | 22251 | 53244 | 9589 | 24265 |
-| `robokill_step` | 23238 | 34619 | 9628 | 15510 |
-| `total (52)` | 1276891 | 2845972 | 522246 | 1271035 |
+| `run_nat_native` | 42036 | 50641 | 18700 | 23637 |
+| `run_nat_add_infix` | 43849 | 52278 | 19211 | 24143 |
+| `run_nat_overflow` | 42020 | 50578 | 18689 | 23621 |
+| `reg_nat_chain` | 42369 | 50970 | 18892 | 23815 |
+| `reg_nat_table` | 42018 | 50625 | 18691 | 23624 |
+| `run_word_arithmetic` | 42016 | 50623 | 18697 | 23628 |
+| `run_word_div_mod` | 42016 | 50623 | 18692 | 23624 |
+| `run_word_wrap_chains` | 42016 | 50623 | 18697 | 23628 |
+| `run_word_bitwise_literals` | 42016 | 50623 | 18700 | 23632 |
+| `run_u32_mod_operator` | 48330 | 56622 | 20694 | 25608 |
+| `eval_bit_adder` | 42016 | 50623 | 18689 | 23620 |
+| `run_float_arithmetic` | 42016 | 50623 | 18697 | 23628 |
+| `run_float_printing` | 48741 | 57065 | 20720 | 25666 |
+| `run_float_specials` | 42016 | 50623 | 18695 | 23626 |
+| `run_float_text_roundtrip` | 42018 | 50625 | 18702 | 23634 |
+| `run_computed_match` | 42030 | 50635 | 18698 | 23636 |
+| `run_state_machine` | 44280 | 52791 | 19373 | 24231 |
+| `run_expr_interpreter` | 47452 | 55613 | 19583 | 24529 |
+| `run_bst_insert` | 46135 | 54441 | 20054 | 24956 |
+| `run_overuse_clone` | 47836 | 55914 | 19884 | 24753 |
+| `run_spare_reuse` | 43849 | 52278 | 19208 | 24142 |
+| `eval_either_suite` | 47994 | 56039 | 19951 | 24818 |
+| `eval_maybe_ops` | 45795 | 53983 | 19658 | 24524 |
+| `eval_tuple_suite` | 43851 | 52280 | 19212 | 24143 |
+| `reg_match_value_literal_arm` | 43580 | 51934 | 18984 | 23932 |
+| `run_insertion_sort` | 47335 | 55602 | 20083 | 24999 |
+| `run_sieve_eratosthenes` | 42846 | 51449 | 18953 | 23893 |
+| `run_binary_search` | 43730 | 52303 | 19258 | 24229 |
+| `run_fuel_loops` | 42020 | 50627 | 18693 | 23625 |
+| `eval_deep_thunk_chain` | 42090 | 50630 | 18712 | 23666 |
+| `run_list_map_fold_ops` | 126606 | 126364 | 33752 | 37224 |
+| `reg_wnf_deep_chain` | 40111 | 38796 | 18086 | 19107 |
+| `run_flat_copy_share` | 42024 | 50629 | 18696 | 23634 |
+| `run_fork_shared_flat` | 52965 | 60800 | 21511 | 26374 |
+| `run_array_fork_unshare` | 58769 | 66112 | 22351 | 27175 |
+| `run_fn_capture_owns` | 49429 | 57327 | 20173 | 25043 |
+| `reg_share_tuple_global` | 47890 | 56219 | 20395 | 25202 |
+| `reg_brw_shared_fields` | 44394 | 52782 | 19502 | 24393 |
+| `reg_closure_capture_once` | 47475 | 55691 | 19847 | 24738 |
+| `reg_array_keep_cow` | 48249 | 56519 | 20716 | 25505 |
+| `run_string_algorithms` | 64509 | 71205 | 23712 | 28662 |
+| `eval_string_escape` | 48514 | 56472 | 20036 | 24925 |
+| `io_hello_print` | 42380 | 50971 | 18799 | 23720 |
+| `io_do_let_lines` | 43826 | 52257 | 19039 | 24042 |
+| `io_text_formatting` | 48603 | 56416 | 20312 | 25135 |
+| `io_chan_close_send` | 49931 | 57819 | 20684 | 25406 |
+| `io_fiber_single_join` | 54233 | 61505 | 21377 | 26008 |
+| `io_deadlock` | 46131 | 54193 | 19771 | 24513 |
+| `io_halt_utf8_law` | 38720 | 47494 | 17380 | 22377 |
+| `io_nat_host_bounds` | 50074 | 58254 | 19965 | 24867 |
+| `io_nat_host_neg` | 44800 | 53244 | 19347 | 24265 |
+| `robokill_step` | 28410 | 34619 | 12083 | 15510 |
+| `total (52)` | 2434359 | 2845972 | 1023004 | 1271035 |

@@ -2,11 +2,12 @@
 # Builds every program of tests/differential/corpus.txt and Robokill's step
 # library (replay/robokill/step.bend --lib init,input_at,step,hash,render,
 # as glue/build.sh builds it) with tools/clang-wasm/build.sh, the plain
-# clang build of TODO t-fwjpak4c step B (docs/clang-wasm.md), and
+# clang build of TODO t-fwjpak4c steps B and C (docs/clang-wasm.md), and
 # validates each module with tools/clang-wasm/check.mjs in the SDK's node:
-# it instantiates with stub imports, lists the imports still unresolved
-# (they trap until step C) and fails on a missing export or a foreign
-# import. Nothing runs: running the programs is step D's loader.
+# it instantiates with stub imports, lists them and fails on a missing
+# export or an import the host does not serve. Nothing runs: running the
+# programs is step D's loader (tools/clang-wasm/math-check.sh runs the
+# musl part).
 #
 # For the sizes, each C is also built with emcc as today (scripts/emcc and
 # scripts/wasm-flags for a program, as tests/differential/run.sh; the
