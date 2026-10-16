@@ -41,7 +41,20 @@ Plan and context: `docs/plan.md`.
   `probe/hello.bend` (patches 0001-0003): 20 errors (wasi-musl has no
   signals and no true mmap without emulation flags); `-target
   wasm32-freestanding`: stops at the first missing libc header
-  (`math.h`). Approach decided after a consult round; recorded here.
+  (`math.h`).
+  Decided by the coordinator after consult round `20261016-175818-a3e6`
+  (sol, mimo, deepseek, argon, wonder, agreeing; under the user's
+  d-fus365v2 and this request): what is worth copying from Zig is the
+  contract, not the toolchain: a freestanding module with explicit exports
+  and host imports (patch 0003's library mode is halfway there) and owning
+  memory (pages from `memory.grow` past `__heap_base`, zero by the spec, no
+  bulk memset). The 536 MiB is the runtime's layout, not the toolchain:
+  the memory items below come first, under Emscripten, to isolate it.
+  Rejected: wasm32-wasi through `zig cc` with emulation flags (re-enables
+  what patch 0002 removed, needs a WASI shim, the emulated mmap still
+  zeroes) and emitting wasm directly from Bend like Zig's own backend (a
+  new compiler backend, orthogonal to the memory bug, no upstream chance).
+  Next after the memory work: the freestanding build item below.
 - [ ] Audit for a CPU-sized wasm layout (read-only, a report in [t-ap3q3hvo]
   `docs/memory.md`): every use of `CUBE`, `CUBE_T`, `CUBE_LOG`, `LANES`,
   `RING_*`, `STAK_*`, `ALC_OFF`, `STAT_*`, `HEAP_OFF` on the CPU path of the
@@ -65,6 +78,19 @@ Plan and context: `docs/plan.md`.
   and the renderer process's resident footprint from the OS (macOS), each
   after init and after the replay, at events the page posts; compare the
   JS lane; rerun the Chrome benchmark after the memory patch.
+- [ ] Freestanding wasm build beside Emscripten (from the Zig request, [t-nt66wuif]
+  consult round `20261016-175818-a3e6`), after the memory patch and its
+  measurement: first `-sSTANDALONE_WASM --no-entry` with Emscripten's own
+  clang (argon; no second toolchain), else `clang --target=wasm32` from
+  the pinned emsdk or `zig cc -target wasm32-freestanding -nostdlib`
+  (pinned); one guard in the patch series, a minimal libc subset (mem*,
+  an allocator over `memory.grow` for the IO paths), printing and effects
+  as named host imports (unsupported ones absent, failing at link time),
+  F32 math from vendored musl sources, never host `Math.*`. Gates: all of
+  ours plus a bit-exact F32 math comparison against native and the JS
+  lane, and `return_call` kept for every `musttail`. Promote it over
+  Emscripten only if it passes every gate and is materially smaller in
+  memory or binary size; otherwise record the result and keep Emscripten.
 - [ ] Offer the patch series upstream on [t-yuiyk4uz]
   https://github.com/bendlang/bend/issues/1598 (the user approves the text
   first).
