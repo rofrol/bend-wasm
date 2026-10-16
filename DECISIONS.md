@@ -176,3 +176,9 @@ Headless Chrome 155.0.8059.80: both match native, exit 0,
 `crossOriginIsolated` false. Run by the coordinator outside the worker
 sandbox (herdr job 20261016-144341-f941), since Chrome cannot start inside
 it. Safari and Firefox not tried.
+
+## fast-code-llm suggestions (d-pzyv4252)
+
+The user 2026-10-16: bend-wasm is wasm for Bend for the Robokill space;
+why guix? ask the models. The printer bench (guix-bend code) is dropped as
+out of scope; mutation seeds, held-out set and ledger go to a consult round.

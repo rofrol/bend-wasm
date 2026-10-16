@@ -47,6 +47,3 @@ Plan and context: `docs/plan.md`.
 - [ ] A held-out program set the patches are never tuned on (recursion [t-pbcfrie3]
   depth, allocation, strings, closures, numeric edges, long-lived state),
   run by the harness beside the 51 (same source).
-- [ ] Add fast-code-llm's printer bench (`loop/bench.bend` with guix-bend's [t-uql5ieyl]
-  printer) to the differential corpus if it compiles on 2.0.35 unchanged:
-  deterministic, allocation- and string-heavy (offered by that session).
