@@ -14,8 +14,12 @@ The Chrome numbers are still to be measured; `run.sh` measures them
   `replay/robokill/step.bend` (Robokill's `spike/step.bend` at `63031ab`):
   `dist/step.mjs`, the JS lane (`scripts/bend step.bend -o step.mjs`, as
   Robokill builds it), and `dist/step.wasm.mjs`, the wasm lane
-  (`glue/build.sh ... init,input_at,step,hash,render`).
-- `node.sh` and `node-bench.mjs`: the paired Node benchmark.
+  (`glue/build.sh ... init,input_at,step,hash,render`), the shipped
+  browser-only build (`-sENVIRONMENT=web`, glue/README.md, "Build").
+- `node.sh` and `node-bench.mjs`: the paired Node benchmark. It runs the
+  Node-capable build of `dist/step.c` (`glue/build.sh --node` into
+  `out/node-dist/`), after `glue/test/shipped.sh` checks that its wasm is
+  the shipped one byte for byte.
 - `main.js`, `index.html`, `serve.mjs`: Robokill's `spike/` page at commit
   `63031ab`, vendored, each with a header naming the source.
 - `run.sh` and `summary.mjs`: the Chrome benchmark; `procs.mjs`: the
@@ -162,8 +166,10 @@ then `out/chrome.md` and `out/baseline.json` under `bench/robokill/`.
 `bench/robokill/check.sh` builds both lanes and runs `check.mjs`:
 
 - `main.js` loaded as a module with stand-ins for the DOM it reads:
-  `?lane=js` and `?lane=wasm` each import their lane (the wasm one
-  compiles and instantiates) and, as Node has no WebGPU, post
+  `?lane=js` and `?lane=wasm` each import their lane (the wasm one,
+  `dist/`'s browser-only glue, compiles and instantiates; the stand-in
+  `fetch` answers its `file:` URL with the file) and, as Node has no
+  WebGPU, post
   `{lane, error: "Error: WebGPU is not available ..."}`; `?lane=c` posts
   its error. These pass in the herdr worker sandbox.
 - `serve.mjs` started without a Chrome profile: it serves `index.html`,

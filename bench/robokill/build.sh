@@ -7,7 +7,8 @@
 # - dist/step.mjs, the JS lane: `scripts/bend step.bend -o step.mjs`, as
 #   Robokill builds spike/dist/step.mjs;
 # - dist/step.wasm.mjs and its files, the wasm lane: glue/build.sh with
-#   --lib init,input_at,step,hash,render.
+#   --lib init,input_at,step,hash,render, the shipped build (for a page,
+#   -sENVIRONMENT=web; node.sh builds a Node-capable one of dist/step.c).
 #
 # Exit status: 0 when both built.
 set -u

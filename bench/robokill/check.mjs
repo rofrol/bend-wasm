@@ -2,8 +2,9 @@
 // after build.sh:
 //
 // - main.js, for each lane: imported with stand-ins for the DOM it reads,
-//   ?lane=L loads that lane's module (the wasm one compiles and
-//   instantiates) and, as Node has no WebGPU, posts {lane: L, error} to
+//   ?lane=L loads that lane's module (the wasm one, dist/'s shipped
+//   browser-only glue, compiles and instantiates) and, as Node has no
+//   WebGPU, posts {lane: L, error} to
 //   ./results; an unknown lane posts its error too;
 // - serve.mjs (it needs a local port, which the herdr worker sandbox
 //   refuses with EPERM): started as run.sh starts it but without a Chrome profile,
@@ -241,13 +242,18 @@ function summaryCheck() {
 }
 
 // main.js under ?lane=L with the DOM it reads stood in: its first post,
-// which the stand-in fetch delivers, and the status line then.
+// which the stand-in fetch delivers, and the status line then. The
+// stand-in answers the shipped glue's fetch of a file: URL (the wasm) with
+// the file, as Node's fetch does not read files.
 async function pageCheck(lane) {
   const el = { textContent: "" };
   globalThis.location = { search: `?lane=${lane}&n=500&frames=10` };
   globalThis.document = { getElementById: () => el };
   const posted = new Promise((resolve) => {
     globalThis.fetch = async (url, init) => {
+      if (String(url).startsWith("file:")) {
+        return new Response(readFileSync(fileURLToPath(url)));
+      }
       resolve({ url, body: JSON.parse(init.body) });
       return new Response("ok");
     };

@@ -11,14 +11,16 @@
 // reset() re-instantiates it from the compiled module. Handles of an
 // earlier instance are refused. Errors the glue finds before entering
 // wasm (a wrong argument type, a stale handle) throw without poisoning.
-
-const isNode = typeof process === "object" && process.versions?.node != null
-  && typeof window === "undefined";
+//
+// glue/build.sh appends the reader of the build's environment to this
+// file, wasmBytes(url): glue/read-web.mjs (fetch) in the shipped build,
+// glue/read-node.mjs in the Node-capable one, so the shipped glue has no
+// Node code at all.
 
 const now = () => performance.now();
 
 // Thrown by the proc_exit import, in place of Emscripten's own, which in
-// Node also sets process.exitCode.
+// Node also sets the exit code of the whole program.
 class Exit extends Error {
   constructor(status) {
     super(`the library exited with status ${status}`);
@@ -57,18 +59,6 @@ export class Handle {
   toString() {
     return `[bend handle ${this.type}]`;
   }
-}
-
-async function wasmBytes(url) {
-  if (isNode) {
-    const { readFile } = await import("node:fs/promises");
-    return readFile(url);
-  }
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`bend-wasm: ${url}: ${res.status}`);
-  }
-  return res.arrayBuffer();
 }
 
 class Lane {

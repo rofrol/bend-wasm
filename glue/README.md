@@ -9,16 +9,35 @@ same host code with identical output.
 ## Build
 
 ```sh
-glue/build.sh MODULE.bend DEFS OUTDIR NAME   # emits C with --lib DEFS first
-glue/build.sh FILE.c OUTDIR NAME             # from library-mode C
+glue/build.sh [--node] MODULE.bend DEFS OUTDIR NAME   # emits C with --lib DEFS first
+glue/build.sh [--node] FILE.c OUTDIR NAME             # from library-mode C
 ```
 
 `OUTDIR` gets `NAME.wasm.mjs` (what the host imports), `bend-glue.mjs`
-(a copy of `glue.mjs`, the runtime), and the Emscripten build
-`NAME.lib.mjs` + `NAME.lib.wasm` (`scripts/wasm-flags`, `-sMODULARIZE
--sEXPORT_ES6 -sENVIRONMENT=web,node`; memory growth off). Outputs are
-ignored by git wherever they are built (`glue/out/`,
-`bench/robokill/dist/`).
+(the runtime, `glue.mjs` with the environment's `wasmBytes` reader
+appended), and the Emscripten build `NAME.lib.mjs` + `NAME.lib.wasm`
+(`scripts/wasm-flags`, `-sMODULARIZE -sEXPORT_ES6 -sFILESYSTEM=0`; memory
+growth off). Outputs are ignored by git wherever they are built
+(`glue/out/`, `bench/robokill/dist/`, `bench/robokill/out/`).
+
+Two builds of the same C, from the one generator:
+
+- shipped, without `--node`: what a page loads (`bench/robokill/dist/`).
+  `-sENVIRONMENT=web` and `read-web.mjs` (fetch), so no Node code ships;
+- Node-capable, `--node`: what the Node tests and the Node benchmark run
+  (`glue/out/`, `bench/robokill/out/node-dist/`). `-sENVIRONMENT=web,node`
+  and `read-node.mjs` (`readFile`, as Node's fetch reads no `file:` URL).
+
+The `.wasm` is the same bytes in both; only the JavaScript differs.
+`glue/test/shipped.sh WEBDIR NODEDIR NAME` checks both: the shipped
+`NAME.wasm.mjs`, `bend-glue.mjs` and `NAME.lib.mjs` name none of
+`require`, `process`, `Buffer`, `fs`, `path`, `__dirname` or `node:`
+(`path` only as `path.` or `"path"`: Emscripten's `locateFile(path)` has a
+parameter of that name), and the two `NAME.lib.wasm` are identical (`cmp`).
+`-sFILESYSTEM=0` because the library uses no file system: Robokill's wasm
+imports only stdio's `fd_write`, `fd_seek` and `fd_close`, `proc_exit`,
+`emscripten_get_now` and `emscripten_resize_heap` (the runtime's file
+access is Linux- or CUDA-only, `glue/build.sh`).
 
 `glue/gen.mjs` writes `NAME.wasm.mjs` from the line patch 0003 writes
 above each exported def (`// render: consumes State, Array<F32> from the
@@ -107,7 +126,8 @@ Nat that is not a BigInt) throw without poisoning, as nothing has run.
 
 `glue/test/run.sh` (the SDK's Node, about 40 s) builds Robokill's
 `step.bend` (`replay/robokill/`, vendored from Robokill `63031ab`) as the
-JS lane and through the glue, and requires:
+JS lane and through the glue (Node-capable, and shipped into
+`glue/out/web/`), and requires:
 
 - `glue/test/replay.mjs`, Robokill's replay protocol written as a host
   (seed 12345, n = 500 and 2,000, 10,000 frames, `step` and `render` into
@@ -123,4 +143,8 @@ JS lane and through the glue, and requires:
   the same C) throws and poisons; with `BEND_LIB_SLOTS` 4 a fifth `init`
   throws `bend: every handle slot is in use (BEND_LIB_SLOTS)` and poisons;
   a fresh import works beside the poisoned instance; `process.exitCode`
-  stays unset.
+  stays unset;
+- `glue/test/shipped.sh glue/out/web glue/out step`: the shipped build
+  names no Node API and its wasm is the tested one (above). Chrome loads
+  the shipped build in `bench/robokill/run.sh`, and `bench/robokill/check.sh`
+  imports it in Node through `main.js` with a stand-in `fetch`.

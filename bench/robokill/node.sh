@@ -1,6 +1,9 @@
 #!/bin/sh
 # The paired Node benchmark (bench/robokill/README.md): builds both lanes
-# (build.sh) and runs node-bench.mjs in the SDK's Node. BLOCKS, FRAMES and
+# (build.sh), the Node-capable build of the wasm lane's dist/step.c into
+# out/node-dist/ (glue/build.sh --node; glue/test/shipped.sh checks that
+# its wasm is the shipped one) and runs node-bench.mjs on dist/step.mjs and
+# out/node-dist/step.wasm.mjs in the SDK's Node. BLOCKS, FRAMES and
 # SIZES pass through. The report goes to stdout and out/node.md, the raw
 # numbers to out/node.json (out/ is ignored), with `scripts/bend
 # --toolchain` above the report.
@@ -18,11 +21,15 @@ if [ -z "$node" ]; then
 fi
 sh "$here/build.sh" || exit 1
 mkdir -p "$here/out"
+rm -rf "$here/out/node-dist"
+sh glue/build.sh --node "$here/dist/step.c" "$here/out/node-dist" step \
+  || exit 1
+sh glue/test/shipped.sh "$here/dist" "$here/out/node-dist" step || exit 1
 {
   scripts/bend --toolchain
   echo
   "$node" "$here/node-bench.mjs" "$here/dist/step.mjs" \
-    "$here/dist/step.wasm.mjs" "$here/out/node.json"
+    "$here/out/node-dist/step.wasm.mjs" "$here/out/node.json"
 } > "$here/out/node.md.tmp" || exit 1
 mv "$here/out/node.md.tmp" "$here/out/node.md"
 cat "$here/out/node.md"
