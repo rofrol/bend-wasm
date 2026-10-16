@@ -82,11 +82,4 @@ Plan and context: `docs/plan.md`.
 
 ## Needs a decision
 
-- [ ] How to get past herdr's disk guard? The next worker run (t-jc2zvbct) [t-id2sk2xi]
-  did not start: "9.8 GiB free on /Users/..., less than 15 GiB (after the
-  folder slot's sweep)" (run r-nmbu5kfx's next_refusal, 2026-10-16).
-  Options: the user frees disk space elsewhere | delete bend-wasm's regenerable caches too (worker `.toolchain/` 2.0 GiB, main 0.1 GiB; not enough alone) | lower herdr's disk threshold for this machine
-  Checked: `df` shows 9.3 GiB free of 460 GiB (98% used); bend-wasm's
-  build outputs total about 2.2 GiB.
-
 ## Proposed
