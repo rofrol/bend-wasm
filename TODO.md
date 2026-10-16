@@ -16,6 +16,10 @@ Plan and context: `docs/plan.md`.
   `BEND_LIB_SLOTS` 4096) ends the process with `_exit(1)`, an unhandled
   `ExitStatus` in Node; decide here, with the trap rule, whether the glue
   turns it into a thrown JS error and a poisoned instance.
+  The user 2026-10-16, on the coordinator saying a visible Chrome window may
+  open for the WebGPU benchmark: "you can, as another session or so"; read
+  by the coordinator as: run it as a separate Chrome instance with its own
+  temporary profile (as Robokill's `serve.mjs` does) without asking first.
 - [ ] Offer the patch series upstream on [t-yuiyk4uz]
   https://github.com/bendlang/bend/issues/1598 (the user approves the text
   first).
