@@ -674,3 +674,16 @@ compiler copy with an empty Bun transpiler cache, the second in another
 TZ, locale, cwd and TMPDIR, and requires identical bytes: it passes, and
 fails on an injected timestamp (worker's check, not committed). The check
 is not registered in `.herdr/checks.toml`.
+
+## Type check of the patched compiler (t-dyxn2pn3)
+
+Done 2026-10-16 (run r-tqd3miak, user's d-qiadn2fv): `scripts/typecheck`
+runs TypeScript 6.0.3 (on the pinned Bun) with `strict` over the patched
+`bend2/*.ts`; the pinned Bend v2.0.35 has 8 type errors of its own
+(`bend.ts` 2x TS2339, `safe.ts` 6x TS2345), recorded in
+`tools/typecheck/baseline.txt`; the check fails only on errors beyond
+them (shown failing on a patch with a type error). Pins in
+`tools/typecheck/package-lock.json`, install in `docs/workflow.md`;
+registered as the herdr check `typecheck`. The coordinator chose 6.0.3
+over 7.x (the native Go port with per-platform binaries) to keep a
+JavaScript tool run by the pinned Bun.
