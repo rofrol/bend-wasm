@@ -78,7 +78,24 @@ Plan and context: `docs/plan.md`.
   passes run through it); our tests run the wasm in emsdk's Node
   (differential wasm lane, replay, glue tests, Node benchmark); a bare
   Node process is 43.5 MiB of the 48 MiB RSS measured after memory step 1.
-  Answer and any change decided after a consult round; recorded here.
+  Decided by the coordinator after consult round `20261016-194332-e124`
+  (sol, mimo, deepseek, argon, wonder, agreeing): the product needs no
+  Node, but the glue is built with `-sENVIRONMENT=web,node`, so the shipped
+  module carries Node branches (`fs`, `process`, ...) that strict bundlers
+  reject: fixed by the next item. Node stays at build time (emcc's JS
+  passes; `-sSTANDALONE_WASM` still runs emcc, argon) and as the test
+  runtime (the only V8, Chrome's engine, the sandbox can start); Bun
+  (JavaScriptCore) would change the engine tested and is not a
+  replacement. Node at build time goes only if a freestanding build with
+  plain `clang --target=wasm32` + `wasm-ld` replaces emcc.
+- [ ] Browser-only shipped glue (from the Node question): build the shipped [t-3wp2nvda]
+  module with `-sENVIRONMENT=web` (and `-sFILESYSTEM=0` if nothing uses a
+  file system), audit `step.wasm.mjs` and the Emscripten glue for
+  `require`, `process`, `Buffer`, `fs`, `path`, `__dirname`, `node:`; the
+  Node tests may use a Node-capable build of the same C, but the `.wasm`
+  bytes of the shipped and the tested build must be identical (a check),
+  and the shipped glue must load in the Chrome page (`bench/robokill`,
+  `probe/web`).
 - [ ] Requested by the user 2026-10-16: "rather weak that Bend's compiler [t-zissmshz]
   is TypeScript on Node? ask the models". Facts checked by the
   coordinator: Bend 2.0.35's compiler is TypeScript (`bend2/*.ts`, about
