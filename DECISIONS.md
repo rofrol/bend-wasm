@@ -219,3 +219,18 @@ the three programs fail on wasm), a missing lane (`LANES`, default
 `BEND_PATCH=0 LANES=js`). The 5 s hang guard in `probe/lib/run.sh` was
 agreed by the coordinator: test tooling, measured drivers 0.01 s native and
 0.21 s wasm, same bound as the harness; no orphaned process left (checked).
+
+## Robokill replay in wasm (t-byai25qu)
+
+Done 2026-10-16 (run r-45s7wfbq): `replay/robokill/run.sh` runs Robokill's
+`spike/step.bend` (vendored from Robokill `63031ab`, `fetch.sh` checks the
+copy) through `--lib`: the 22 checkpoints are identical for `replay.bend`,
+the native library driver and wasm; final hashes equal Robokill's
+RESULTS.md (603820250 for n = 500, 819172968 for n = 2,000); render-byte
+hashes equal native and wasm on all 20,000 frames. Heap on the real path
+(n = 500, step + render + hash every frame): high-water 39,040 words and
+one live handle from the first to the last checkpoint over 100,000 and
+1,000,000 frames, native and wasm. Patch 0003 now returns tuples (extra
+components through `r<i>` pointers) and passes `Array<F32>` through a
+fixed library-owned region (`bend_f32`, `BEND_LIB_F32` default 16,384);
+ordinary programs' C unchanged.
