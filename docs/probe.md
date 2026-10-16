@@ -226,9 +226,23 @@ waiting on a timer or a stream is not supported on this target (wasm)`;
 `TCP.connect` with `bend: sockets are not supported on this target
 (wasm)`; `vendor/bend/tests/io/file_binary.bend` with `bend: blocking
 effects (files, processes, random numbers) are not supported on this
-target (wasm)`; each after the output printed before it. A program using
-`IO.random_u32` does not compile (`getrandom` is undeclared: its effect
-includes `sys/random.h` only on Linux); `Process.run` was not tried.
+target (wasm)`; each after the output printed before it.
+
+Hardening (TODO item t-cqjfh5mc, 2026-10-16). `IO.random_u32` did not
+compile (`getrandom` undeclared: its effect included `sys/random.h` only
+on Linux) and `Process.run` did not compile either
+(`posix_spawn_file_actions_addclosefrom_np` undeclared in Emscripten's
+libc). Both effects run only on the helper pthread (`io_work`), so patch
+0002 now makes them compile and they stop with the helper-effect error:
+`probe/random.bend` and `probe/process.bend` print their first line, then
+`bend: blocking effects (files, processes, random numbers) are not
+supported on this target (wasm)`, exit 1, in `w32-patched`, `w32-tc-grow`,
+`w64` and `w64-pthread` (`w32` aborts with `Aborted(OOM)` as every
+program does). Natively both print their two lines. The audit of every
+Term-stack push under Emscripten (the list is in the patch header) found
+none uncovered: a segment's frame is checked by `WL_ROOM`, and a task's
+entry pushes at most 250 words from the stack's base, inside the 16 KiB
+past its end; so no new stack probe was needed beyond `probe/deep.bend`.
 
 ### The differential corpus on wasm32
 
