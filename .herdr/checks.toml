@@ -1,0 +1,7 @@
+# Checks `herdr todo run --check NAME...` may run to verify a worker's commit:
+# each name maps to a program and its arguments, run as they are in the
+# worker's folder (no shell, so nothing is expanded or split).
+
+[checks]
+# An explicit parent-to-head diff also checks merge commits, unlike git show.
+whitespace = ["git", "diff", "--check", "HEAD^", "HEAD"]

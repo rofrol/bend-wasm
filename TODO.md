@@ -12,6 +12,12 @@ Plan and context: `docs/plan.md`.
   `bend -o x.c` and `emcc` with build flags only; record every error in
   `docs/probe.md` and classify each blocker as shim-able, emitter change or
   architectural, with the `comp.ts` lines involved.
+
+- [ ] Open the upstream issue at https://github.com/bendlang/bend with the [t-ymygf5au]
+  outline in `docs/plan.md`, once the probe has its first errors?
+  Decided by the user 2026-10-16 (d-kznksmaz): yes, after the probe; the
+  coordinator shows the issue text for approval before posting.
+
 - [ ] If the probe allows it: a CPU-only single-worker build of the pure [t-xwj7ptut]
   program runs under Node and in a browser page without cross-origin
   isolation, with output identical to the native build.
@@ -21,18 +27,10 @@ Plan and context: `docs/plan.md`.
 
 ## Needs a decision
 
-- [ ] Register a first `.herdr/checks.toml` so `herdr todo run` can dispatch [t-hrqgssgq]
-  workers (the driver refuses a run without at least one registered check,
-  herdr `src/workers/runs.rs:947`; this repository has no checks file yet)?
-  Options: the coordinator commits `whitespace = ["git", "diff", "--check", "HEAD^", "HEAD"]` as in roagent's `.herdr/checks.toml`, later items add their own checks | the user writes the file | no herdr dispatch, the coordinator does the items itself
-  Checked: no `.herdr/` in the repository; `herdr todo run --help` lists
-  `--check NAME...` as required.
-
-- [ ] Open the upstream issue at https://github.com/bendlang/bend with the [t-ymygf5au]
-  outline in `docs/plan.md`, once the probe has its first errors?
-  Options: yes, after the probe | not yet | never
 - [ ] Patch the Bend emitter (`comp.ts`) if the probe shows that flags and [t-3oqripea]
   shims are not enough?
   Options: decide after seeing the blocker inventory | no patches, upstream only
+  Decided by the user 2026-10-16 (d-bfbxt6rp): decide after seeing the
+  classified blocker inventory in `docs/probe.md`; ask again then.
 
 ## Proposed
