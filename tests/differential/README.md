@@ -34,10 +34,12 @@ BEND_PATCH=0 LANES=js sh tests/differential/run.sh
 ```
 
 A lane is a name in `lanes` plus its `lane_build_<name>` and
-`lane_run_<name>` functions in `run.sh`. Each run has a 5 s hang guard,
-mirroring Bend's own gate for the same non-`!` programs
-(`vendor/bend/gates/test.ts:136`); it only stops a program that never ends,
-which then counts as FAILED with "timeout".
+`lane_run_<name>` functions in `run.sh`. Each run has a hang guard of 5 s
+of CPU time (`scripts/guard`), mirroring Bend's own gate for the same
+non-`!` programs (`vendor/bend/gates/test.ts:136`); CPU time, not wall
+time, so checks running in parallel do not kill a slowed program. It only
+stops a program that never ends (SIGXCPU, exit 152), which then counts as
+FAILED with "timeout".
 
 ## How the corpus was picked
 

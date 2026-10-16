@@ -35,14 +35,18 @@ fail() {
   status=1
 }
 
-# timed CMD...: runs CMD with a hang guard, as tests/differential/run.sh
-# does. The guard is not a wait for a result: it only stops a run that
-# never ends (a corrupted handle can loop forever, tests/negative), which
-# exits 142 (SIGALRM) and fails its check. Measured 2026-10-16 on an Apple
-# arm64 Mac: the drivers take 0.01 s native and 0.21 s in wasm, so 5 s
-# leaves a 20-fold margin.
+# timed CMD...: runs CMD with the hang guard, scripts/guard (5 s of CPU
+# time), as tests/differential/run.sh does. It only stops a run that never
+# ends (a corrupted handle can loop forever, tests/negative), which exits
+# 152 (SIGXCPU) and fails its check as "timeout". Measured 2026-10-16 on an
+# Apple arm64 Mac: the drivers take 0.01 s native and 0.21 s in wasm, so
+# 5 s leaves a 20-fold margin.
 timed() {
-  perl -e 'alarm 5; exec @ARGV or exit 127' "$@"
+  scripts/guard "$@"
+}
+# why CODE: " (timeout)" when CODE is the guard's kill, else nothing.
+why() {
+  [ "$1" = 152 ] && echo " (timeout, stopped by the hang guard)"
 }
 
 step() {
@@ -64,10 +68,18 @@ step native "$cc" -std=c11 -O3 "$out/counter.c" "$here/drive.c" -lpthread \
 step wasm scripts/emcc $(scripts/wasm-flags) -sMODULARIZE -sEXPORT_ES6 \
   -sEXPORTED_FUNCTIONS=$exports "$out/counter.c" -o "$out/counter.mjs"
 
-timed "$out/main.bin" > "$out/main.out" || fail "main exited $?"
-timed "$out/drive" > "$out/native.out" || fail "native driver exited $?"
-timed "$node" "$here/drive.mjs" "$out/counter.mjs" > "$out/wasm.out" \
-  || fail "wasm driver exited $?"
+timed "$out/main.bin" > "$out/main.out" || {
+  c=$?
+  fail "main exited $c$(why $c)"
+}
+timed "$out/drive" > "$out/native.out" || {
+  c=$?
+  fail "native driver exited $c$(why $c)"
+}
+timed "$node" "$here/drive.mjs" "$out/counter.mjs" > "$out/wasm.out" || {
+  c=$?
+  fail "wasm driver exited $c$(why $c)"
+}
 
 echo "native:"
 cat "$out/native.out"
@@ -100,7 +112,8 @@ misuse() {
   code=$?
   grep -q '^bend: peek: a handle that was consumed, disposed or never made' \
     "$out/misuse.err" && [ "$code" = 1 ] \
-    || fail "$1: a disposed handle gave exit $code: $(head -n 1 "$out/misuse.err")"
+    || fail "$1: a disposed handle gave exit $code$(why $code):" \
+      "$(head -n 1 "$out/misuse.err")"
 }
 misuse "$out/drive"
 misuse "$node" "$here/drive.mjs" "$out/counter.mjs"

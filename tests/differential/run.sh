@@ -8,8 +8,10 @@
 # `bend t.bend -o t.c` with scripts/emcc and scripts/wasm-flags and runs
 # the result with the Emscripten SDK's Node.
 #
-# Output: tests/differential/out/ (ignored), per program and lane the build
-# log, stdout, stderr and exit code, and summary.txt.
+# Output: tests/differential/out/ (ignored; DIFFERENTIAL_OUT, a path
+# relative to the repository root, overrides it, so tests/negative's runs
+# do not clear a run beside them), per program and lane the build log,
+# stdout, stderr and exit code, and summary.txt.
 # Exit status: 0 when every program in the corpus matched native on every
 # lane in LANES. A lane in LANES that cannot be built here (wasm under
 # BEND_PATCH=0) fails the run at once; LANES=js is the explicit opt-out for
@@ -18,7 +20,7 @@ set -u
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 here=tests/differential
-out=$here/out
+out=${DIFFERENTIAL_OUT:-$here/out}
 # The lanes compared with native, in order (LANES overrides the list). A
 # lane is one more name here and its lane_build_<name> and lane_run_<name>
 # functions below.
@@ -51,13 +53,12 @@ say() {
   echo "$*" | tee -a "$summary"
 }
 
-# timed CMD...: runs CMD with a hang guard. The guard is not a wait for a
-# result: it only stops a program that never ends. 5 s mirrors Bend's own
-# gate for the same non-`!` test programs (vendor/bend/gates/test.ts:136).
-# A program killed by the guard exits 142 (SIGALRM) and counts as FAILED
-# with "timeout".
+# timed CMD...: runs CMD with the hang guard, scripts/guard (5 s of CPU
+# time, as Bend's own gate for the same non-`!` test programs,
+# vendor/bend/gates/test.ts:136). A program killed by the guard exits 152
+# (SIGXCPU) and counts as FAILED with "timeout".
 timed() {
-  perl -e 'alarm 5; exec @ARGV or exit 127' "$@"
+  scripts/guard "$@"
 }
 
 # lane_build_<lane> SRC BASE: builds SRC into BASE.<lane files>.
@@ -110,8 +111,8 @@ run_lane() {
   lane_run_"$1" "$b" > "$b.out" 2> "$b.err"
   code=$?
   echo $code > "$b.code"
-  if [ "$code" = 142 ]; then
-    echo "timeout (stopped by the hang guard, exit 142)"
+  if [ "$code" = 152 ]; then
+    echo "timeout (stopped by the hang guard, exit 152)"
   fi
 }
 

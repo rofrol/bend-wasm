@@ -83,14 +83,16 @@ consumed() {
   lane=$1
   shift
   # The hang guard of probe/lib/run.sh's timed, for the same drivers.
-  perl -e 'alarm 5; exec @ARGV or exit 127' "$@" > "$out/consumed.$lane.out" 2> "$out/consumed.$lane.err"
+  scripts/guard "$@" > "$out/consumed.$lane.out" 2> "$out/consumed.$lane.err"
   code=$?
   if [ "$code" = 1 ] && grep -q \
     '^bend: peek: a handle that was consumed, disposed or never made' \
     "$out/consumed.$lane.err"; then
     ok "stale: a consumed handle fails with exit 1 and the handle message ($lane)"
   else
-    bad "stale: a consumed handle gave exit $code ($lane):" \
+    t=
+    [ "$code" = 152 ] && t=", timeout (stopped by the hang guard)"
+    bad "stale: a consumed handle gave exit $code$t ($lane):" \
       "$(head -n 1 "$out/consumed.$lane.err")"
   fi
 }
@@ -112,6 +114,7 @@ fi
 # the differential run must report exactly the three programs it fixed.
 want='reg_nat_chain run_bst_insert run_string_algorithms'
 if expect_fail env-abi env BEND_PATCH_EXTRA=$here/env-abi.patch LANES=wasm \
+  DIFFERENTIAL_OUT=$out/env-abi \
   sh tests/differential/run.sh
 then
   got=$(sed -En 's/^([^ ]*) wasm: (DIFFERS|FAILED).*/\1/p' \
@@ -126,7 +129,8 @@ fi
 
 # 4. Missing lane: under BEND_PATCH=0 the wasm lane cannot be built, and a
 # run that expects it must fail at once.
-if expect_fail missing-lane env BEND_PATCH=0 sh tests/differential/run.sh
+if expect_fail missing-lane env BEND_PATCH=0 \
+  DIFFERENTIAL_OUT=$out/missing-lane sh tests/differential/run.sh
 then
   if grep -q '^wasm: FAILED, not available' "$out/missing-lane.log"; then
     ok "missing-lane: the differential run fails without the wasm lane"

@@ -1,0 +1,18 @@
+#!/bin/sh
+# guard CMD...: runs CMD with the test scripts' hang guard and exits with
+# its status. The guard is not a wait for a result: it only stops a program
+# that never ends. It bounds CPU time, not wall time, so a legitimate
+# program slowed down by other checks running beside it is not killed; a
+# Bend program that never ends spins and uses the CPU it is denied.
+#
+# 5 s mirrors Bend's own gate for its test programs
+# (vendor/bend/gates/test.ts:136). The limit (RLIMIT_CPU) is inherited by
+# CMD and counts the CPU of all its threads, also under Node and Bun.
+# Observed 2026-10-16 on an Apple arm64 Mac (macOS, bash as sh): a native
+# loop, Node and Bun spinning past the limit all die by SIGXCPU, exit 152
+# (128 + 24). A program that ignores SIGXCPU is not stopped (macOS does not
+# kill at the hard limit); none of the guarded programs does.
+#
+# Callers report exit 152 as "timeout", never as a mismatch.
+ulimit -t 5 || exit 1
+exec "$@"
