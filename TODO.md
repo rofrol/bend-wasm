@@ -81,6 +81,8 @@ Plan and context: `docs/plan.md`.
   and the renderer process's resident footprint from the OS (macOS), each
   after init and after the replay, at events the page posts; compare the
   JS lane; rerun the Chrome benchmark after the memory patch.
+  This run freezes the emcc baseline for the clang cutover criteria
+  (shipped wasm and JS sizes raw and gzip, linear memory, Chrome p95).
 - [ ] Requested by the user 2026-10-16: "do we need Node.js in Bend at [t-msockqr3]
   all? ask the models." Facts checked by the coordinator: the browser
   product does not run Node; the Bend compiler runs on Bun 1.4.2; `emcc`
@@ -143,21 +145,39 @@ Plan and context: `docs/plan.md`.
   freestanding item sits after the memory work, the browser-only glue and
   the reproducibility check, and replaces Emscripten only if it passes
   every gate and is materially smaller; `-sSTANDALONE_WASM` still needs
-  emcc (and so Node), so only plain clang + wasm-ld removes emcc. Timing
-  and criteria decided after a consult round; recorded here.
-- [ ] Freestanding wasm build beside Emscripten (from the Zig request, [t-nt66wuif]
-  consult round `20261016-175818-a3e6`), after the memory patch and its
-  measurement: first `-sSTANDALONE_WASM --no-entry` with Emscripten's own
-  clang (argon; no second toolchain), else `clang --target=wasm32` from
-  the pinned emsdk or `zig cc -target wasm32-freestanding -nostdlib`
-  (pinned); one guard in the patch series, a minimal libc subset (mem*,
-  an allocator over `memory.grow` for the IO paths), printing and effects
-  as named host imports (unsupported ones absent, failing at link time),
-  F32 math from vendored musl sources, never host `Math.*`. Gates: all of
-  ours plus a bit-exact F32 math comparison against native and the JS
-  lane, and `return_call` kept for every `musttail`. Promote it over
-  Emscripten only if it passes every gate and is materially smaller in
-  memory or binary size; otherwise record the result and keep Emscripten.
+  emcc (and so Node), so only plain clang + wasm-ld removes emcc.
+  Decided by the coordinator after consult round `20261016-194631-afbb`
+  (sol, mimo, deepseek, argon, wonder): it is not a date. It comes after
+  the Chrome memory measurement (which freezes the emcc baseline) and the
+  build reproducibility check, then four freestanding steps (the item
+  below); the emcc lane ships until they pass. `-sSTANDALONE_WASM` is
+  dropped (it still runs emcc's driver, libc and glue; all five). The
+  browser-only glue item stays (cheap; the baseline must be clean). Cut
+  over cleanly when every criterion holds; keep emcc only as an unshipped
+  diagnostic build (ASSERTIONS, SAFE_HEAP); if the size criterion fails,
+  emcc stays and the result is recorded.
+- [ ] Plain-clang freestanding build replacing emcc (from the Zig and [t-fwjpak4c]
+  clang questions; consult rounds `20261016-175818-a3e6` and
+  `20261016-194631-afbb`), in steps, each its own commit:
+  (A) symbol inventory: compile the 51 programs and Robokill with
+  `clang --target=wasm32 -nostdlib -mtail-call -c` from the pinned emsdk
+  (clang 24, wasm-ld) and list undefined symbols (`llvm-nm -u`): the real
+  libc gap, which sizes the rest; (B) under one guard in the patch series:
+  mem*, an allocator over `__heap_base`/`memory.grow` for the IO paths,
+  printing, abort and effects as named host imports, library-mode exports,
+  linked with `wasm-ld --no-entry`; (C) F32 and other math from vendored
+  musl sources built with `-ffp-contract=off -fno-fast-math`, never host
+  `Math.*`, bit-exact against the emcc build with edge vectors for every
+  math function used; (D) our own small JS loader (no Node branches) and
+  the full gate run.
+  Cutover criteria, set before results (decided by the coordinator): all
+  gates pass (differential, negative, replay hashes and render bytes, heap
+  bound over 1,000,000 frames); `return_call` present for every `musttail`
+  in the disassembly; two clean builds give identical artifacts; in Chrome
+  linear memory not above and frame p95 within 5% of the frozen emcc
+  baseline; the shipped wasm plus JS at least 20% smaller gzip-compressed.
+  Pass: switch cleanly, keep emcc as an unshipped diagnostic build. Fail:
+  keep emcc, record the numbers.
 - [ ] Offer the patch series upstream on [t-yuiyk4uz]
   https://github.com/bendlang/bend/issues/1598 (the user approves the text
   first).
