@@ -34,6 +34,14 @@ Plan and context: `docs/plan.md`.
   to find the fix (a design decision a search would game, e.g. by
   under-provisioning); later the loop (t-ayhexs3c) may tune lane count and
   corpus size with memory as a score under these gates.
+- [ ] Requested by the user 2026-10-16: "see how Zig produces wasm output, [t-ci7r5qnc]
+  so that Bend can do it that way too; ask the models". Facts checked by
+  the coordinator: Zig 0.17.0 is installed (Homebrew); Bend 2.0.35 does not
+  use Zig. `zig cc -target wasm32-wasi -O2` on Bend's emitted C of
+  `probe/hello.bend` (patches 0001-0003): 20 errors (wasi-musl has no
+  signals and no true mmap without emulation flags); `-target
+  wasm32-freestanding`: stops at the first missing libc header
+  (`math.h`). Approach decided after a consult round; recorded here.
 - [ ] Audit for a CPU-sized wasm layout (read-only, a report in [t-ap3q3hvo]
   `docs/memory.md`): every use of `CUBE`, `CUBE_T`, `CUBE_LOG`, `LANES`,
   `RING_*`, `STAK_*`, `ALC_OFF`, `STAT_*`, `HEAP_OFF` on the CPU path of the
