@@ -4,49 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Requested by the user 2026-10-16: "the tab with wasm takes about 536 [t-5j4vdpgg]
-  MiB, very bad; analyze it; maybe fast-code-llm helps here? ask the
-  models." (Chrome benchmark, DECISIONS.md "Wasm module, glue and
-  benchmark": wasm tab about 536 MiB against 4.5 to 15 MiB for the JS lane;
-  Robokill's real heap use is 39,040 words.)
-  Analysis by the coordinator 2026-10-16: two causes. (1) Emscripten
-  6.0.10's `mmap(MAP_ANONYMOUS)` does `memalign` then `memset(ptr, 0,
-  alloc_len)` (`system/lib/libc/emscripten_mmap.c`), so the whole corpus is
-  resident (Node replay peak RSS: wasm 616 MB, JS lane 202 MB, bare Node
-  43 MB) and `bend_init` takes 134 to 344 ms. (2) The corpus layout is
-  GPU-shaped: `CUBE_T` 128, `CUBE` 16,384 lanes, each with a ring (1,026
-  words) and a stack (2,048 words: 256 MiB), plus ALC; `corpus_lay`
-  requires `(span - HEAP_OFF) / (PAGE_LEN + 10) > CUBE`, so the minimum
-  corpus is about 409.5 MiB (`comp.ts` 3462-3497) while Robokill needs
-  0.3 MB of heap.
-  Decided by the coordinator after consult round `20261016-174158-ae98`
-  (sol, mimo, deepseek, argon, wonder; under the user's d-fus365v2 and this
-  request): the items below, in order; no memory growth (detaches JS views,
-  gains nothing once the corpus is small); fast-code-llm's loop is not used
-  to find the fix (a design decision a search would game, e.g. by
-  under-provisioning); later the loop (t-ayhexs3c) may tune lane count and
-  corpus size with memory as a score under these gates.
-- [ ] Requested by the user 2026-10-16: "see how Zig produces wasm output, [t-ci7r5qnc]
-  so that Bend can do it that way too; ask the models". Facts checked by
-  the coordinator: Zig 0.17.0 is installed (Homebrew); Bend 2.0.35 does not
-  use Zig. `zig cc -target wasm32-wasi -O2` on Bend's emitted C of
-  `probe/hello.bend` (patches 0001-0003): 20 errors (wasi-musl has no
-  signals and no true mmap without emulation flags); `-target
-  wasm32-freestanding`: stops at the first missing libc header
-  (`math.h`).
-  Decided by the coordinator after consult round `20261016-175818-a3e6`
-  (sol, mimo, deepseek, argon, wonder, agreeing; under the user's
-  d-fus365v2 and this request): what is worth copying from Zig is the
-  contract, not the toolchain: a freestanding module with explicit exports
-  and host imports (patch 0003's library mode is halfway there) and owning
-  memory (pages from `memory.grow` past `__heap_base`, zero by the spec, no
-  bulk memset). The 536 MiB is the runtime's layout, not the toolchain:
-  the memory items below come first, under Emscripten, to isolate it.
-  Rejected: wasm32-wasi through `zig cc` with emulation flags (re-enables
-  what patch 0002 removed, needs a WASI shim, the emulated mmap still
-  zeroes) and emitting wasm directly from Bend like Zig's own backend (a
-  new compiler backend, orthogonal to the memory bug, no upstream chance).
-  Next after the memory work: the freestanding build item below.
 - [ ] Wasm memory, step 2 (from the same audit): under `__EMSCRIPTEN__` a [t-fkta2jvt]
   host layout without the device-only areas (ALC rows 8 MiB, Term stacks
   256 MiB; the host keeps `ALC[w]` static and stacks in `pool_stack`),
@@ -83,23 +40,6 @@ Plan and context: `docs/plan.md`.
   JS lane; rerun the Chrome benchmark after the memory patch.
   This run freezes the emcc baseline for the clang cutover criteria
   (shipped wasm and JS sizes raw and gzip, linear memory, Chrome p95).
-- [ ] Requested by the user 2026-10-16: "do we need Node.js in Bend at [t-msockqr3]
-  all? ask the models." Facts checked by the coordinator: the browser
-  product does not run Node; the Bend compiler runs on Bun 1.4.2; `emcc`
-  needs Node at build time (emsdk's `.emscripten` sets `NODE_JS`; its JS
-  passes run through it); our tests run the wasm in emsdk's Node
-  (differential wasm lane, replay, glue tests, Node benchmark); a bare
-  Node process is 43.5 MiB of the 48 MiB RSS measured after memory step 1.
-  Decided by the coordinator after consult round `20261016-194332-e124`
-  (sol, mimo, deepseek, argon, wonder, agreeing): the product needs no
-  Node, but the glue is built with `-sENVIRONMENT=web,node`, so the shipped
-  module carries Node branches (`fs`, `process`, ...) that strict bundlers
-  reject: fixed by the next item. Node stays at build time (emcc's JS
-  passes; `-sSTANDALONE_WASM` still runs emcc, argon) and as the test
-  runtime (the only V8, Chrome's engine, the sandbox can start); Bun
-  (JavaScriptCore) would change the engine tested and is not a
-  replacement. Node at build time goes only if a freestanding build with
-  plain `clang --target=wasm32` + `wasm-ld` replaces emcc.
 - [ ] Browser-only shipped glue (from the Node question): build the shipped [t-3wp2nvda]
   module with `-sENVIRONMENT=web` (and `-sFILESYSTEM=0` if nothing uses a
   file system), audit `step.wasm.mjs` and the Emscripten glue for
@@ -108,26 +48,6 @@ Plan and context: `docs/plan.md`.
   bytes of the shipped and the tested build must be identical (a check),
   and the shipped glue must load in the Chrome page (`bench/robokill`,
   `probe/web`).
-- [ ] Requested by the user 2026-10-16: "rather weak that Bend's compiler [t-zissmshz]
-  is TypeScript on Node? ask the models". Facts checked by the
-  coordinator: Bend 2.0.35's compiler is TypeScript (`bend2/*.ts`, about
-  12,700 lines) run by Bun (`#!/usr/bin/env bun`; our pin 1.4.2), not
-  Node; `main.ts` is also a Bun plugin and a Node import hook for
-  `import x from "./x.bend"`; upstream ships its release `bend` binary
-  built with `bun build --compile` (CHANGELOG, #1025); no self-hosting plan
-  found in its README, CHANGELOG or WONTFIX. The compiler is upstream's;
-  bend-wasm only pins it; it has no `package.json` or npm dependencies
-  (imports only `bun` and built-ins), so its supply chain is Bun itself.
-  Decided by the coordinator after consult round `20261016-194422-4983`
-  (sol, mimo, deepseek, argon, wonder, agreeing): the language is not a
-  material weakness here (build time only, Emscripten dominates the build,
-  TypeScript makes rebasing our `comp.ts` patches easier); keep the
-  upstream compiler; do not rewrite or port it (months, a permanent fork)
-  and do not ask upstream for a language change (it chose TypeScript for
-  the Bun/Node import hooks). The real risks are reproducibility and the
-  build's trust in Bun: the next item. A single compiled binary (`bun
-  build --compile`) only if a separate Bun install becomes a measured
-  burden (it embeds the same runtime; not a security gain).
 - [ ] Build reproducibility (from the compiler question): `scripts/bend` [t-3rs6ne3b]
   checks Bun's exact build (`bun --revision`, not only the version) and
   `--toolchain` prints it; a check emits the C of a few programs twice
@@ -140,22 +60,6 @@ Plan and context: `docs/plan.md`.
   coordinator; catches type errors our `comp.ts` patches introduce.
   Decided by the user 2026-10-16 (d-qiadn2fv): yes.
 
-- [ ] Requested by the user 2026-10-16: "when will the freestanding build [t-ouqr25cb]
-  on plain clang --target=wasm32 replace emcc? ask the models". Today the
-  freestanding item sits after the memory work, the browser-only glue and
-  the reproducibility check, and replaces Emscripten only if it passes
-  every gate and is materially smaller; `-sSTANDALONE_WASM` still needs
-  emcc (and so Node), so only plain clang + wasm-ld removes emcc.
-  Decided by the coordinator after consult round `20261016-194631-afbb`
-  (sol, mimo, deepseek, argon, wonder): it is not a date. It comes after
-  the Chrome memory measurement (which freezes the emcc baseline) and the
-  build reproducibility check, then four freestanding steps (the item
-  below); the emcc lane ships until they pass. `-sSTANDALONE_WASM` is
-  dropped (it still runs emcc's driver, libc and glue; all five). The
-  browser-only glue item stays (cheap; the baseline must be clean). Cut
-  over cleanly when every criterion holds; keep emcc only as an unshipped
-  diagnostic build (ASSERTIONS, SAFE_HEAP); if the size criterion fails,
-  emcc stays and the result is recorded.
 - [ ] Plain-clang freestanding build replacing emcc (from the Zig and [t-fwjpak4c]
   clang questions; consult rounds `20261016-175818-a3e6` and
   `20261016-194631-afbb`), in steps, each its own commit:
