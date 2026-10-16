@@ -35,3 +35,18 @@ Plan and context: `docs/plan.md`.
 ## Needs a decision
 
 ## Proposed
+- [ ] Mutation seeds for the differential harness (from the fast-code-llm [t-cec2xt5r]
+  session's consult round `20261016-144453-a08f`): deliberately broken
+  patches it must reject (truncated output, wrong exit code, integer width
+  or signedness change, the `Env` calling-convention bug reintroduced,
+  memory growth on, a leak breaking the 100,000-call bound, stale handle
+  reuse); a mutant that passes means the harness is too weak.
+- [ ] A per-patch ledger: Bend and Emscripten versions, patch series hash, [t-axd6nj7p]
+  lane, program, stdout and exit hashes, verdict, append-only (same
+  source).
+- [ ] A held-out program set the patches are never tuned on (recursion [t-pbcfrie3]
+  depth, allocation, strings, closures, numeric edges, long-lived state),
+  run by the harness beside the 51 (same source).
+- [ ] Add fast-code-llm's printer bench (`loop/bench.bend` with guix-bend's [t-uql5ieyl]
+  printer) to the differential corpus if it compiles on 2.0.35 unchanged:
+  deterministic, allocation- and string-heavy (offered by that session).
