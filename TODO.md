@@ -12,6 +12,11 @@ Plan and context: `docs/plan.md`.
   5 s source (`vendor/bend/gates/test.ts:136`), and report a guard kill as
   "timeout", never as a mismatch; show the negative check passing while
   another CPU-heavy check runs beside it.
+- [ ] Requested by the user 2026-10-16: "the tab with wasm takes about 536 [t-5j4vdpgg]
+  MiB, very bad; analyze it; maybe fast-code-llm helps here? ask the
+  models." (Chrome benchmark, DECISIONS.md "Wasm module, glue and
+  benchmark": wasm tab about 536 MiB against 4.5 to 15 MiB for the JS lane;
+  Robokill's real heap use is 39,040 words.)
 - [ ] Offer the patch series upstream on [t-yuiyk4uz]
   https://github.com/bendlang/bend/issues/1598 (the user approves the text
   first).
