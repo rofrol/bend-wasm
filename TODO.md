@@ -214,11 +214,15 @@ Plan and context: `docs/plan.md`.
 
 ## Proposed
 
-- [ ] Shrink the plain-clang wasm (from t-fwjpak4c step C, run [t-32btjh3h]
-  r-mrmrsddj): every module now carries musl's `strtod` with binary128
-  soft-float (18,596 bytes of code) because the runtime parses `--gpu`
-  with it, and `fmt_fp` (5,237 bytes) for the error path. Options the
-  worker named: parse `--gpu` without `strtod` (a patch change), or a
-  `floatscan` in `double` (a musl edit needing its own bit-exactness
-  proof). Matters only if step D's size criterion (shipped wasm plus JS at
-  least 20% smaller gzip) is tight.
+- [ ] Shrink the plain-clang wasm, deferred (from t-fwjpak4c step C, run [t-fo6rczs2]
+  r-mrmrsddj). Measured by the coordinator (llvm-nm on the linked
+  modules): the shipped Robokill library (30,663 bytes) has no `strtod`,
+  `__floatscan` or soft-float (no `main` in library mode), only `fmt_fp`
+  (~4.5 KB, ~15%, on the error path's snprintf); test programs carry ~18.6
+  KB from `--gpu`'s `strtod`. Consult round `20261016-234352-94c8` (sol,
+  mimo, deepseek, argon, wonder): not now; the loader of step D is the
+  lever; if ever, compile `--gpu` out under wasm rather than write a
+  parser, and check whether Robokill needs `fmt_fp` at all. Argon's "format
+  F32 in JS" is rejected (host math, not bit exact).
+  Decided by the user 2026-10-16 (d-56q3pxh7): defer until step D measures
+  the shipped wasm plus JS; revisit only if the 20% margin is short.
