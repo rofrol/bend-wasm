@@ -48,8 +48,9 @@ themselves; `scripts/bend` stops with that command when it is missing.
 
 Our changes to Bend are a series of `patches/NNNN-short-name.patch` files,
 each with a header naming the upstream change that retires it; the
-convention and how to make one are in `patches/README.md`. `vendor/bend`
-stays a clean checkout of the pin.
+convention and how to make one (so that it passes the `whitespace`
+check) are in `patches/README.md`. `vendor/bend` stays a clean checkout of
+the pin.
 
 - When the series is not empty, `scripts/bend` copies the pinned commit
   into `.toolchain/<pin>-<first 16 hex of the series' sha256>` (ignored),

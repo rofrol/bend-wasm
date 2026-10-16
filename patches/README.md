@@ -29,9 +29,17 @@ cd "$scratch" && git init -q && git add -A && git commit -qm pin
 for p in /path/to/bend-wasm/patches/*.patch; do git apply "$p"; done
 git add -A && git commit -qm series
 # edit, then:
-{ printf '%s\n' 'What it changes and why.' 'Retired by: <upstream link>' ''; git diff; } \
-  > /path/to/bend-wasm/patches/NNNN-short-name.patch
+{ printf '%s\n' 'What it changes and why.' 'Retired by: <upstream link>' ''
+  git diff | sed 's/^ $//'; } > /path/to/bend-wasm/patches/NNNN-short-name.patch
 ```
+
+The `sed` empties the context lines of blank source lines, which `git diff`
+writes as a single space: committed as is, they fail the `whitespace`
+check (`git diff --check`). `git apply` reads an empty line in a hunk as
+that same blank context line, so the patch applies to the same result.
+Trailing whitespace of any other kind comes from the Bend source itself
+and cannot be stripped without breaking `git apply`; if the check still
+fails, report it instead of editing the patch by hand.
 
 Then run `scripts/check-patches` and the checks of the item. To change an
 existing patch, apply the series up to the one before it, edit, and write
