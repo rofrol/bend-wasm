@@ -16,6 +16,14 @@ Plan and context: `docs/plan.md`.
   `BEND_LIB_SLOTS` 4096) ends the process with `_exit(1)`, an unhandled
   `ExitStatus` in Node; decide here, with the trap rule, whether the glue
   turns it into a thrown JS error and a poisoned instance.
+- [ ] Follow-up of t-oh4vht3i (found by run r-nmbu5kfx): the 5 s hang [t-jc2zvbct]
+  guard is wall-clock, so under CPU contention (checks run in parallel)
+  legitimate programs are killed and `tests/negative/run.sh`'s `env-abi`
+  case reports three extra programs. A hang guard must not depend on load:
+  bound CPU time instead (e.g. `ulimit -t` in the guard), keeping the same
+  5 s source (`vendor/bend/gates/test.ts:136`), and report a guard kill as
+  "timeout", never as a mismatch; show the negative check passing while
+  another CPU-heavy check runs beside it.
 - [ ] Offer the patch series upstream on [t-yuiyk4uz]
   https://github.com/bendlang/bend/issues/1598 (the user approves the text
   first).
