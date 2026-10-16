@@ -72,6 +72,13 @@ Plan and context: `docs/plan.md`.
   `CUBE_T` (changes `!` fork order; `RING_WORDS` and `RING_LOG`'s 17 are
   tied to 128). Gates as step 1 plus the audit's lane-boundary,
   ring-near-full, stack-near-limit and exhaustion tests.
+  Also (from run r-epvs73bi, decided by the coordinator): `probe/run.sh`'s
+  pre-patch variants (`w32`, `w32-tc-grow`, `w64`, `w64-pthread`,
+  `w64-web`) document the original probe, so they run on the pin
+  (`BEND_PATCH=0`), and `w32-patched` on the series; `probe/run.sh` exits 0
+  again with each variant's expected result stated; `docs/probe.md` says
+  so. Step 1 left `INITIAL_MEMORY` at 528MB (wasm-ld needs 520.5 MiB for the
+  static corpus); this step lowers it.
 - [ ] Memory measurement in the benchmark: report [t-2lsz77ug]
   `WebAssembly.Memory.buffer.byteLength`, `measureUserAgentSpecificMemory`
   and the renderer process's resident footprint from the OS (macOS), each
