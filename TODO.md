@@ -153,3 +153,17 @@ Plan and context: `docs/plan.md`.
   shipped-glue change. Not yet reproduced by the coordinator. Find why the
   Node run fills the corpus while the Chrome run at n = 2,000 does not, and
   fix it or size it (docs/memory.md).
+
+- [ ] Differential check's temp dir deleted mid-run (from t-dyxn2pn3, run [t-vdfibz6b]
+  r-tqd3miak, verify event 178884, 2026-10-16 ~21:47): in herdr's verify,
+  `tests/differential/run.sh` got `ENOENT ... mkdtemp
+  tests/differential/out/tmp/bend-*` from program ~33 on (ok 64, DIFFERS 1,
+  FAILED 34); the diff did not touch `tests/`. Checked: herdr runs checks
+  sequentially and keeps ignored files (`src/workers/verify.rs:166-196`,
+  `git clean -fdq` without `-x`); worker w381 had exited at 21:44:45 with
+  no background run; no corpus program deletes files. Suspect: a second
+  `tests/differential/run.sh` with the default output in the same folder
+  (its `rm -rf "$out"` at line 43), source unknown. Proposed: give each
+  run its own output under `out/` (or refuse a concurrent run with a lock
+  naming the holder), and keep the first failing program's full message in
+  the summary, since verify keeps only the tail.
