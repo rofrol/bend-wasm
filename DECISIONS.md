@@ -190,3 +190,17 @@ test; revisit before claiming general compatibility upstream), narrowed
 negative checks after library mode (TODO). Accepted extras: heap bound on
 the real `step` path, first divergent frame kept, trap recovery, tab
 memory with the 512 MiB corpus.
+
+## Library mode spike, patch 0003 (t-esggsei6)
+
+Done 2026-10-16 (run r-s4pab6ns): `bend P.bend -o P.c --lib a,b,c` emits C
+with no `main()`, exporting `bend_init`, `bend_def_<name>`, `bend_dispose`
+and a debug `bend_heap_words`. Non-scalar values cross as handles (slot in
+the low 32 bits, generation in the high 32, type id checked); a `+`
+parameter is borrowed by `term_keep`, any other handle is consumed.
+Kill criterion not triggered: `probe/lib/counter.bend` stepped 100,000
+times keeps the allocator's high-water at 16,512 words from the first
+checkpoint on, natively and in wasm, with peeks equal to `main`; a
+deliberate leak raises it by 12,288 words per 1,000 calls, so the meter
+sees leaks. Ordinary programs emit byte-identical C (58 checked). Open
+points went to t-byai25qu and t-2czhzqqy.

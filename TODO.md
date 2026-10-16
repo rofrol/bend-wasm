@@ -4,15 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Persistent-state spike, patch 0003 (library mode, separate from the [t-esggsei6]
-  portability patches): the emitter emits, for named definitions, exported
-  C entry points with no `main()`; JS holds opaque handles (root table slot
-  plus generation); a call consumes or borrows (borrow by `term_keep`), an
-  explicit dispose frees; reuse of a consumed handle fails. Check: a counter
-  state stepped 100,000 times across calls keeps the heap high-water mark
-  bounded, natively and in wasm. Kill criterion (decided by the coordinator
-  under d-fus365v2): if it does not stay bounded, stop and report to the
-  user before any further wasm work.
 - [ ] Negative checks (decided by the coordinator 2026-10-16 after consult [t-oh4vht3i]
   round `20261016-145116-5f6f`, under the user's d-pzyv4252 "ask the
   models"; narrowed from the fast-code-llm session's mutation seeds): the
