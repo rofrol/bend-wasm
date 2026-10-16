@@ -4,18 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Wasm module plus JS glue with the JS lane's `G.*` shape (`init`, [t-2czhzqqy]
-  `step`, `input_at`, `render` into a fixed exported F32 region viewed once,
-  `hash`), and a Chrome benchmark against Robokill's JS lane (p95 1.09 ms at
-  2,000 bodies); hand the result to Robokill's coordinator, whose decision
-  0003 decides the switch.
-  Also (same round): define what happens after a wasm trap (the instance is
-  poisoned: invalidate handles and re-instantiate, tested), and measure the
-  tab's memory with the fixed 512 MiB corpus beside the game's WebGPU use.
-  From run r-s4pab6ns: a misuse (stale handle, slot table full at
-  `BEND_LIB_SLOTS` 4096) ends the process with `_exit(1)`, an unhandled
-  `ExitStatus` in Node; decide here, with the trap rule, whether the glue
-  turns it into a thrown JS error and a poisoned instance.
 - [ ] Follow-up of t-oh4vht3i (found by run r-nmbu5kfx): the 5 s hang [t-jc2zvbct]
   guard is wall-clock, so under CPU contention (checks run in parallel)
   legitimate programs are killed and `tests/negative/run.sh`'s `env-abi`

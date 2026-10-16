@@ -234,3 +234,34 @@ one live handle from the first to the last checkpoint over 100,000 and
 components through `r<i>` pointers) and passes `Array<F32>` through a
 fixed library-owned region (`bend_f32`, `BEND_LIB_F32` default 16,384);
 ordinary programs' C unchanged.
+
+## Wasm module, glue and benchmark (t-2czhzqqy)
+
+Done 2026-10-16 (run r-nmbu5kfx). `glue/build.sh` makes
+`dist/step.wasm.mjs` with exactly the JS lane's `G.*` shape (opaque
+handles, tuples `{fst, snd}`, `render` filling the caller's
+`Float32Array` with one 64 KiB copy, about 1.2 us); a misuse or trap throws
+a JS `Error` and poisons the instance until `await reset()`. Through the
+glue, Robokill's replay prints the same 22 checkpoints (final hashes as
+its RESULTS.md).
+
+Chrome benchmark (decided by the user, d-zvnjtccs; run by the coordinator,
+herdr job 20261016-165751-e290, `bench/robokill/run.sh` at 152e557, which
+differs from the landed commit only in a check and its README): Chrome 155,
+Apple M1 Pro, WebGPU `apple`/`metal-3`, cross-origin isolated, 5 blocks
+with alternating lane order, 10,000 frames per run, lanes' hashes equal.
+Median over blocks, step+upload ms:
+
+| n | lane | p50 | p95 | p99 | max |
+| --- | --- | --- | --- | --- | --- |
+| 500 | js | 0.225 | 0.250 | 0.350 | 4.515 |
+| 500 | wasm | 0.125 | 0.140 | 0.150 | 0.530 |
+| 2000 | js | 0.985 | 1.075 | 1.135 | 1.535 |
+| 2000 | wasm | 0.360 | 0.390 | 0.410 | 0.575 |
+
+Paired wasm/JS ratio, median of blocks (p50 / p95): 0.556 / 0.540 at
+n = 500, 0.363 / 0.362 at n = 2,000. Costs: the tab holds about 536 MiB
+with wasm (the fixed corpus) against 4.5 to 15 MiB with JS; wasm load
+157 to 362 ms, almost all `bend_init` (134 to 344 ms), against 6 to 40 ms
+for the JS import. Node agreed (p95 ratio 0.23 to 0.24). The result goes
+to Robokill's coordinator for its decision 0003.
