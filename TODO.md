@@ -26,6 +26,18 @@ Plan and context: `docs/plan.md`.
   baseline; the shipped wasm plus JS at least 20% smaller gzip-compressed.
   Pass: switch cleanly, keep emcc as an unshipped diagnostic build. Fail:
   keep emcc, record the numbers.
+  Step (A) done 2026-10-16 (run r-iptfuhjv, 5abd632): `tools/clang-wasm/inventory.sh`
+  and `docs/clang-wasm.md`. All 52 C files (51 corpus programs and
+  Robokill's step library) compile with plain clang 24 `--target=wasm32
+  -nostdlib -mtail-call` against the emsdk's musl headers (17 headers
+  missing without a sysroot); 39 undefined libc symbols in all (a typical
+  program 30-35, Robokill 14), all on IO, error, F32-printing or the
+  multi-worker pool paths, none on the `WL_FID_*` hot path; memcpy/memset
+  become `memory.copy`/`memory.fill`; no libm needed by any of the 52;
+  step (C) needs 15 double math functions plus fmodf, strtof and %e/%f
+  formatting; `musttail` gives `return_call`. `-D__EMSCRIPTEN__` is still
+  needed (the series' wasm path keys on it); step (B) replaces it with its
+  own guard. Next: step (B).
 - [ ] Offer the patch series upstream on [t-yuiyk4uz]
   https://github.com/bendlang/bend/issues/1598 (the user approves the text
   first).
