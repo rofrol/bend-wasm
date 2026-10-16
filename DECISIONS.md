@@ -82,3 +82,14 @@ a given but must be measured; F32 arrays are contiguous u32 blocks, so a
 zero-copy F32 view is possible. Dismissed: raw 64-bit terms as JS handles
 (argon), unsafe once a term moves or is freed; "arrays are trees" (argon),
 wrong for this runtime.
+
+## Differential harness (t-ucc65gif)
+
+Done 2026-10-16 (run r-kihgd5qi): `tests/differential/run.sh` over 51
+programs from Bend's tests (`corpus.txt`), native vs JS lane, all match;
+the wasm lane is reserved. Registered as the herdr check `differential`.
+Hang guard 5 s, as Bend's own gate for the same programs
+(`vendor/bend/gates/test.ts:136`). Exclusions with reasons in
+`tests/differential/README.md`. Finding: `tests/io/process_run.bend`
+differs on the JS lane (reproduced outside the sandbox by the coordinator);
+the upstream report is item t-gdvytox3.

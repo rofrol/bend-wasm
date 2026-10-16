@@ -13,12 +13,6 @@ Plan and context: `docs/plan.md`.
   Decided by the user 2026-10-16 (d-kss2xbko): yes; the coordinator shows
   the issue text before posting.
 
-- [ ] Differential test harness: one script builds a corpus native, JS lane and [t-ucc65gif]
-  wasm and diffs stdout and exit code; start with at least 20 deterministic
-  programs from Bend's own tests; list exclusions with reasons.
-  Decided by the user 2026-10-16 (d-lx22tkg5): start now with native and
-  JS lane only; wasm joins once a wasm build runs (t-xwj7ptut).
-
 - [ ] Decision record `docs/decisions/0001-wasm-through-a-patched-emitter.md` [t-fushyjis]
   from DECISIONS.md "Wasm approach"; correct `docs/plan.md` "Known facts":
   the runtime has no tracing GC but frees affine values and refcounts shared
