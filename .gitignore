@@ -10,3 +10,5 @@ probe/web/out/
 tests/differential/out/
 # Patched copies of the pinned Bend built by scripts/bend (patches/README.md)
 .toolchain/
+# Generated C, builds and outputs of probe/lib/run.sh
+probe/lib/out/
