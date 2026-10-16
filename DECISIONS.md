@@ -478,3 +478,8 @@ default corpus again; under `__EMSCRIPTEN__` the out-of-memory message is
 -DBEND_CORPUS_BYTES=..." (native and JS text unchanged); stale "528 MB"
 fixed. `probe/run.sh` needs `probe/exhaust.bend`'s expectation updated
 (next follow-up).
+
+## Exhaust probe expectation (t-fjpg2odo)
+
+Done 2026-10-16 (run r-ovs2aiyz): `probe/exhaust.bend` expects the new wasm
+out-of-memory message; `docs/probe.md` updated; `probe/run.sh` exits 0.
