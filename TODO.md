@@ -4,11 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Decision record `docs/decisions/0001-wasm-through-a-patched-emitter.md` [t-fushyjis]
-  from DECISIONS.md "Wasm approach"; correct `docs/plan.md` "Known facts":
-  the runtime has no tracing GC but frees affine values and refcounts shared
-  ones (`heap_alloc`/`heap_free`, `term_keep`/`term_drop`, `comp.ts`
-  4060-4120), and F32 arrays are contiguous u32 blocks (BUF, 2^c).
 - [ ] Patch series infrastructure: `patches/NNNN-*.patch` applied by [t-u66qb3n7]
   `scripts/bend` to a cached copy of the pin, published by rename (as
   herdr-bend's `scripts/bend` and `toolchain-patch.py` do), `BEND_PATCH=0`

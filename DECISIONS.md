@@ -98,3 +98,9 @@ the upstream report is item t-gdvytox3.
 
 Posted 2026-10-16 after the user approved the text (d-vz6pvgnd): https://github.com/bendlang/bend/issues/1599.
 The program stays excluded from the harness until upstream answers.
+
+## Wasm decision record (t-fushyjis)
+
+Done 2026-10-16 (run r-rzcz45w7): `docs/decisions/0001-wasm-through-a-patched-emitter.md`;
+`docs/plan.md` "Known facts" corrected (no tracing GC, affine frees and
+refcounts, F32 arrays as contiguous u32 blocks).
