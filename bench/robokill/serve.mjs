@@ -1,5 +1,6 @@
 // Vendored from Robokill's spike/serve.mjs at commit 63031ab, unchanged but
-// for these two lines (bench/robokill/README.md).
+// for these two lines and the edits marked "bend-wasm:"
+// (bench/robokill/README.md).
 // Serves spike/ on 127.0.0.1 and waits for the page to POST its results.
 // Usage: node spike/serve.mjs <port> <results.json> [<chrome profile dir> <query>]
 // With a profile dir it starts a separate Chrome on the page once the server
@@ -11,6 +12,7 @@ import { spawn } from "node:child_process";
 import { openSync } from "node:fs";
 import { readFile, writeFile, rename } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
+import { rendererMemory } from "./procs.mjs"; // bend-wasm
 
 const root = new URL(".", import.meta.url).pathname;
 const [port = "8642", outPath = join(root, "dist", "results.json"), profile, query = ""] = process.argv.slice(2);
@@ -19,6 +21,17 @@ let chrome = null;
 const types = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".json": "application/json" };
 
 createServer(async (req, res) => {
+  // bend-wasm: a memory mark the page posts (after init, after the replay)
+  // and waits for: the reply is the page's renderer and its memory, read
+  // while the page waits (procs.mjs); null fields without a Chrome.
+  if (req.method === "POST" && req.url === "/mark") {
+    for await (const _ of req);
+    const os = chrome === null ? { error: "no Chrome started" }
+      : await rendererMemory(chrome.pid, outPath);
+    res.writeHead(200, { "content-type": "application/json" })
+      .end(JSON.stringify(os));
+    return;
+  }
   if (req.method === "POST" && req.url === "/results") {
     let body = "";
     for await (const chunk of req) body += chunk;
@@ -51,6 +64,9 @@ createServer(async (req, res) => {
   chrome = spawn(CHROME, [
     `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check",
     "--enable-precise-memory-info", "--js-flags=--trace-gc", "--enable-logging=stderr",
+    // bend-wasm: measureUserAgentSpecificMemory() resolves at once instead of
+    // after Chrome's next scheduled garbage collection.
+    "--enable-blink-features=ForceEagerMeasureMemory",
     "--window-size=1320,900", url,
   ], { stdio: ["ignore", log, log] });
   chrome.on("exit", (code) => { console.log("chrome exited " + code); process.exit(2); });

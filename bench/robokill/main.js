@@ -1,7 +1,7 @@
 // Vendored from Robokill's spike/main.js at commit 63031ab, with the edits
 // listed in bench/robokill/README.md (marked "bend-wasm:"): ?lane=js|wasm
-// picks the lane module, the results carry the lane, its load times and
-// the tab's memory.
+// picks the lane module, the results carry the lane, its load times and,
+// per run, memory marks after init and after the replay.
 //
 // JS host for the milestone 2 spike: on each requestAnimationFrame callback
 // it calls the Bend `step`, has `render` write the sprite data into a
@@ -13,6 +13,9 @@
 
 // bend-wasm: the lane module, imported in main() so a failure is posted.
 let G, laneModule, importMs;
+// bend-wasm: the wasm lane's linear memory, caught from the instance the
+// glue makes (the glue does not hand it out); null on the JS lane.
+let wasmMemory = null;
 
 const STRIDE = 4; // x, y, angle, atlas index
 const PROJ = 256; // projectile slots after the n bodies
@@ -134,18 +137,41 @@ function heap() {
   return performance.memory ? performance.memory.usedJSHeapSize : null;
 }
 
+// bend-wasm: a memory mark, outside the timed frames: the wasm lane's
+// linear memory, the tab's memory (cross-origin isolated) and, from
+// serve.mjs, the renderer process's resident size and footprint. The page
+// waits for serve.mjs's reply, so the OS numbers are read while it is idle;
+// with another server os is null.
+async function mark(event) {
+  const m = { event, wasmMemoryBytes: wasmMemory?.buffer.byteLength ?? null,
+    uaMemory: null, os: null };
+  if (self.crossOriginIsolated && performance.measureUserAgentSpecificMemory) {
+    const u = await performance.measureUserAgentSpecificMemory();
+    m.uaMemory = {
+      bytes: u.bytes,
+      breakdown: u.breakdown.filter((b) => b.bytes > 0).map((b) => ({ bytes: b.bytes, types: b.types })),
+    };
+  }
+  try {
+    const res = await fetch("./mark", { method: "POST", body: event });
+    if (res.ok) m.os = await res.json();
+  } catch {}
+  return m;
+}
+
 function quantile(sorted, p) {
   return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
 }
 
 // Runs `frames` frames for n bodies, one per animation frame callback.
-function runOne(gpu, n) {
+async function runOne(gpu, n) {
   const count = n + PROJ;
   const out = new Float32Array(16384); // render writes in place (JS lane)
   const buf = gpu.device.createBuffer({
     size: count * STRIDE * 4, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
   });
   let state = G.init(n, 12345);
+  const memory = [await mark("init")]; // bend-wasm
   const stepMs = new Float64Array(frames);
   const drawMs = new Float64Array(frames);
   const rafGap = [];
@@ -153,7 +179,7 @@ function runOne(gpu, n) {
   const heapSamples = [];
   let frame = 0, lastRaf = null;
 
-  return new Promise((resolve) => {
+  const result = await new Promise((resolve) => {
     function checkpoint() {
       const r = G.hash(state);
       state = r.fst;
@@ -220,11 +246,22 @@ function runOne(gpu, n) {
     }
     requestAnimationFrame(tick);
   });
+  memory.push(await mark("replay")); // bend-wasm: the state is still live
+  return { ...result, memory };
 }
 
 async function main() {
   // bend-wasm: the lane switch
   if (lane !== "js" && lane !== "wasm") throw new Error(`?lane=${lane}: js or wasm`);
+  if (lane === "wasm") { // bend-wasm: catch wasmMemory
+    const instantiate = WebAssembly.instantiate;
+    WebAssembly.instantiate = async (...args) => {
+      const r = await instantiate.apply(WebAssembly, args);
+      const inst = r instanceof WebAssembly.Instance ? r : r.instance;
+      if (inst.exports.memory instanceof WebAssembly.Memory) wasmMemory = inst.exports.memory;
+      return r;
+    };
+  }
   const t0 = performance.now();
   laneModule = await import(lane === "wasm" ? "./dist/step.wasm.mjs" : "./dist/step.mjs");
   importMs = performance.now() - t0;
@@ -240,15 +277,6 @@ async function main() {
     runs: [],
   };
   for (const n of sizes) results.runs.push(await runOne(gpu, n));
-  // bend-wasm: the tab's memory (JS and wasm, the 512 MiB corpus included;
-  // not the GPU's), which needs cross-origin isolation (serve.mjs).
-  if (self.crossOriginIsolated && performance.measureUserAgentSpecificMemory) {
-    const m = await performance.measureUserAgentSpecificMemory();
-    results.memory = {
-      bytes: m.bytes,
-      breakdown: m.breakdown.filter((b) => b.bytes > 0).map((b) => ({ bytes: b.bytes, types: b.types })),
-    };
-  }
   const text = JSON.stringify(results, null, 2);
   statusEl.textContent = "done";
   resultsEl.textContent = text;

@@ -7,14 +7,15 @@
 # directory cross-origin isolated, starts a separate Chrome with a fresh
 # profile on the page and exits once the page has posted its results.
 # QUERY defaults to "n=500,2000&frames=10000" (RESULTS.md's run), PORT to
-# 8642. Then summary.mjs writes out/chrome.md.
+# 8642. Then summary.mjs writes out/chrome.md and, when its checks hold,
+# out/baseline.json (the frozen emcc baseline).
 #
 # Chrome cannot start inside the herdr worker sandbox: run this outside it,
 # on a Mac with WebGPU, with the Chrome window in front (rAF slows down
 # when it is hidden). CHROME is serve.mjs's path, /Applications/Google
 # Chrome.app.
 # Output: bench/robokill/out/ (ignored): <block>-<lane>.json, their
-# .chrome.log (V8 GC trace), chrome.md. Exit status: 0 when every run
+# .chrome.log (V8 GC trace), chrome.md, baseline.json. Exit status: 0 when every run
 # posted results, the lanes' hashes agree and summary.mjs's checks hold.
 set -u
 root=$(cd "$(dirname "$0")/../.." && pwd)

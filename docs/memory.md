@@ -740,3 +740,20 @@ glue, this one on the module directly, so the RSS rows compare only
 roughly; the linear memory falls from 528 MiB to 11 MiB.
 
 Not measured: Chrome's tab (t-2lsz77ug).
+
+## Measuring in Chrome
+
+`bench/robokill/run.sh` (outside the worker sandbox; README there,
+"Memory") records, per run and lane, after init and after the replay, at
+marks the page posts and waits on: the wasm lane's
+`memory.buffer.byteLength`, `performance.measureUserAgentSpecificMemory()`
+(the tab's JS and wasm, not the GPU's), and the renderer process's `ps`
+RSS and `footprint` `phys_footprint`. `serve.mjs` finds the renderer as
+the busiest `--type=renderer` descendant of the Chrome it spawned
+(`bench/robokill/procs.mjs`). `summary.mjs` reports the medians over
+blocks and writes `out/baseline.json`, the frozen emcc baseline of the
+clang cutover (shipped sizes raw and gzip -9, linear memory, the memory
+numbers, Chrome p50/p95). Linear memory is fixed per build (no growth), so
+the tab and renderer numbers are what the corpus work changes in Chrome;
+in Node the same build reads 11,534,336 bytes of linear memory after
+init.
