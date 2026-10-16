@@ -20,5 +20,10 @@ Plan and context: `docs/plan.md`.
   The JS lane met Robokill's frame budget (DECISIONS.md, "No comp.ts patch"),
   so no patch is approved and wasm is an experiment. Continue the wasm work?
   Options: park it, keep issue 1598 open and resume when a workload misses the JS-lane budget or upstream adds a wasm mode | continue as an experiment with the consult round's minimal patch | drop the wasm target
+  Decided by the user 2026-10-16 (d-fus365v2): "wasm is a must; you take
+  care of it; ask the models." The coordinator decides the approach after a
+  consult round and records it here; a `comp.ts` patch set on the pinned
+  Bend is within that mandate (AGENTS.md Rule 6: small, separable, pinned,
+  with the upstream change that retires it).
 
 ## Proposed
