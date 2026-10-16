@@ -7,7 +7,8 @@ that lives across calls from a game loop, natively and in wasm).
   corpus, the allocator, one worker and its Term stack); each named def
   is a C function bend_def_<name>; bend_dispose(handle) drops a value;
   bend_heap_words() is the heap high-water mark in words (the pages the
-  allocator took from the corpus), a debug export.
+  allocator took from the corpus) and bend_handles() the number of live
+  handles, debug exports.
 - Which defs: the ones js_lib exports to JS (js_outs, shared with it).
   U32 and F32 cross as uint32_t and float, a Nat (up to 2^48-1) as
   uint64_t; any other closure-free datatype crosses as an opaque u64
@@ -16,6 +17,20 @@ that lives across calls from a game loop, natively and in wasm).
   so a handle of another type, or a consumed or disposed one, fails with
   a message and exit 1. Other types (functions, open types) stop the
   emitter with an error.
+- A tuple result (A & B, nested ones flattened) crosses as its parts: the
+  first is the C return value, part i >= 1 is written through a pointer
+  parameter r<i> after the def's own parameters (a handle, a scalar).
+- An Array<F32> crosses as data in one fixed F32 region, bend_f32() of
+  bend_f32_len() == BEND_LIB_F32 floats (a power of two, default 16384),
+  never as a handle or a C value: an Array<F32> parameter has no C
+  parameter (the def reads the region), an Array<F32> result part has no
+  C value (the def writes the region; void when it is the first part).
+  The library owns the Bend array block between calls (allocated on first
+  use, then reused): a call copies the region into it and hands it to the
+  def, which owns its Array parameters; the returned block is copied back
+  into the region and held for the next call. A result of another length
+  fails. So the region is the array between calls, as the JS lane's typed
+  array is; at most one Array<F32> crosses each way per def.
 - A handle passed as a +parameter is borrowed: the host keeps it with
   term_keep (its type is made hot, so the def takes a shared value), or
   passes it as is when the emitter's lend analysis found the def only
@@ -31,7 +46,7 @@ Retired by: an upstream C library or FFI output mode
 (https://github.com/bendlang/bend/issues/1598).
 
 diff --git a/bend2/comp.ts b/bend2/comp.ts
-index 4a7ecdd..0844209 100644
+index 4a7ecdd..631e7f3 100644
 --- a/bend2/comp.ts
 +++ b/bend2/comp.ts
 @@ -2747,13 +2747,19 @@ function effect_srcs(fl: File, ext: string, miss: string): string[] {
@@ -77,7 +92,7 @@ index 4a7ecdd..0844209 100644
    const wide = [...fl.bangs].some((k) =>
      fun_of(fl, k).live.some(([, , A]) => ty_clo(book, A)));
    const dev = reach([...[...fl.bangs].map(seg_fid), ...wide ? fl.clos : []]);
-@@ -2874,7 +2884,252 @@ export function compile_book(book: Bend.Book): string {
+@@ -2874,7 +2884,374 @@ export function compile_book(book: Bend.Book): string {
      die("an unbound name in the emitted C");
    }
    return c_ids(fl, runtime_c([tabs, ...desc].join("\n\n"), spins, segs,
@@ -117,7 +132,8 @@ index 4a7ecdd..0844209 100644
 +  return "bend_def_" + Bend.name_key(k).replace(/\W/g, "_");
 +}
 +
-+// lib_kind is how a value of type A crosses: a scalar's C type, or a
++// lib_kind is how a value of type A crosses: a scalar's C type, "Array"
++// for an Array<F32> (the F32 region's contents, never a C value), or a
 +// handle of a type id in tys (its key, layout and name).
 +function lib_kind(fl: File, A: HTerm | null, lay: Lay, tys: string[][],
 +  what: string): string | number {
@@ -125,9 +141,13 @@ index 4a7ecdd..0844209 100644
 +  if (t !== null && WORDS[t.k] !== undefined) {
 +    return t.k;
 +  }
++  if (t?.k === "Array" && ty_adt(fl.book, t.x[0])?.k === "F32") {
++    return "Array";
++  }
 +  if (t === null || ty_clo(fl.book, A)) {
 +    die("--lib: " + what + " has a type a host cannot hold yet (only U32,"
-+      + " F32, Nat and closure-free datatypes cross)");
++      + " F32, Nat, Array<F32>, closure-free datatypes and tuples of them"
++      + " cross)");
 +  }
 +  const key = [Bend.term_key(Bend.term_lower(t)), lay.ks.join(),
 +    Bend.name_key(t.k)];
@@ -135,8 +155,27 @@ index 4a7ecdd..0844209 100644
 +  return at >= 0 ? at : tys.push(key) - 1;
 +}
 +
++// lib_parts is what a result crosses as: a tuple (A & B, a Sigma) its
++// components in order, a nested one flattened (A & B & C), anything else
++// itself.
++function lib_parts(fl: File, A: HTerm | null): (HTerm | null)[] {
++  const t = ty_adt(fl.book, A);
++  if (t?.k !== "Sigma") {
++    return [A];
++  }
++  const tld = fl.book.tlds[t.k];
++  if (tld?.$ !== "ADT") {
++    return [A];
++  }
++  const [a, b] = ctr_doms(fl.book, tld.c[0], t.x);
++  return [a, ...lib_parts(fl, b)];
++}
++
 +const LIB_C: Record<string, string> = { U32: "u32", F32: "float",
 +  Nat: "u64" };
++
++const lib_ty = (c: string | number): string => typeof c === "number" ? "u64"
++  : c === "Array" ? "void" : LIB_C[c];
 +
 +function lib_c(fl: File, outs: Name[]): string {
 +  const tys: string[][] = [];
@@ -148,9 +187,23 @@ index 4a7ecdd..0844209 100644
 +    const brw = brw_of(fl, k);
 +    const ins = live.map(([, x, A], i) => lib_kind(fl, A, lays[i], tys,
 +      key + "'s parameter " + x));
-+    const out = lib_kind(fl, T, ret, tys, key + "'s result");
-+    const ps = ins.map((c, i) => `${typeof c === "number" ? "u64"
-+      : LIB_C[c]} a${i}`);
++    // a result crosses as its parts, each with its own words of ret
++    const parts = lib_parts(fl, T);
++    const plays = parts.length === 1 ? [ret]
++      : parts.map((A) => lay_of(fl.book, A));
++    if (plays.flatMap((l) => l.ks).join() !== ret.ks.join()) {
++      die("--lib: " + key + "'s result is a tuple too wide to cross");
++    }
++    const outk = parts.map((A, p) => lib_kind(fl, A, plays[p], tys,
++      key + "'s result" + (parts.length > 1 ? " part " + p : "")));
++    if (ins.filter((c) => c === "Array").length > 1
++      || outk.filter((c) => c === "Array").length > 1) {
++      die("--lib: " + key + " passes more than one Array<F32> each way (the"
++        + " F32 region holds one)");
++    }
++    const ps = [...ins.flatMap((c, i) => c === "Array" ? []
++      : [`${lib_ty(c)} a${i}`]), ...outk.slice(1).flatMap((c, p) =>
++      c === "Array" ? [] : [`${lib_ty(c)}* r${p + 1}`])];
 +    const at = lays.map((_, i) => lays.slice(0, i).flatMap((l) => l.ks)
 +      .length);
 +    const put = (i: number, w: string) => `  e.mem[nd + ${at[i]}] = ${w};`;
@@ -173,9 +226,13 @@ index 4a7ecdd..0844209 100644
 +      if (c === "U32") {
 +        return [put(i, `a${i}`)];
 +      }
++      if (c === "Array") {
++        // the def owns its Array parameters (brw_of): the block is its
++        return [put(i, "lib_arr_in(e)")];
++      }
 +      const n = lays[i].ks.length;
-+      const take = `  ${i === order[0] ? "LibSlot* " : ""}s = lib_take(a${i
-+        }, ${c}, "${key}");`;
++      const take = `  ${i === order.find((j) => typeof ins[j] === "number")
++        ? "LibSlot* " : ""}s = lib_take(a${i}, ${c}, "${key}");`;
 +      const copy = `  memcpy(&e.mem[nd + ${at[i]}], s->w, ${n} * sizeof(u64));`;
 +      if (keep[i]) {
 +        return [take, ...brw[i] ? [] : boxes(i).map((j) =>
@@ -190,22 +247,37 @@ index 4a7ecdd..0844209 100644
 +      return [take, copy, "  lib_kill(s);"];
 +    });
 +    const fid = seg_fid(k);
-+    const res = typeof out === "number" ? `lib_new(e.mem + H_ROOT_WORD, ${out
-+      })` : out === "F32" ? "lib_f32((u32)e.mem[H_ROOT_WORD])"
-+      : out === "U32" ? "(u32)e.mem[H_ROOT_WORD]" : "e.mem[H_ROOT_WORD]";
-+    return [`// ${key}: ${ins.map((c, i) => typeof c === "number"
-+      ? (keep[i] ? "borrows " : "consumes ")
-+        + tys[c][2] : c).join(", ") || "no arguments"} -> ${typeof out
-+      === "number" ? "a handle of " + tys[out][2] : out}`,
-+    `${typeof out === "number" ? "u64" : LIB_C[out]} ${lib_name(k)}(${
++    const offs = plays.map((_, p) => plays.slice(0, p).flatMap((l) => l.ks)
++      .length);
++    const got = outk.map((c, p) => {
++      const w = `e.mem[H_ROOT_WORD + ${offs[p]}]`;
++      return typeof c === "number" ? `lib_new(&${w}, ${c})`
++        : c === "Array" ? `lib_arr_out(e, ${w}, "${key}")`
++        : c === "F32" ? `lib_f32((u32)${w})` : c === "U32" ? `(u32)${w}` : w;
++    });
++    // the first part is the return value (none for an Array); the others
++    // are written before the drops of after
++    const ty = lib_ty(outk[0]);
++    const res = got[0];
++    after.unshift(...outk.flatMap((c, p) => p === 0 && c !== "Array" ? []
++      : [`  ${c === "Array" ? "" : "*r" + p + " = "}${got[p]};`]));
++    const say = (c: string | number, i: number | null) => typeof c
++      === "number" ? (i === null ? "a handle of " : keep[i] ? "borrows "
++        : "consumes ") + tys[c][2] : c === "Array" ? (i === null
++        ? "Array<F32> into the F32 region" : "Array<F32> from the F32 region")
++        : c;
++    return [`// ${key}: ${ins.map((c, i) => say(c, i)).join(", ")
++      || "no arguments"} -> ${outk.map((c, p) => (p > 0 && c !== "Array"
++      ? "*r" + p + " = " : "") + say(c, null)).join(" & ")}`,
++    `${ty} ${lib_name(k)}(${
 +      ps.join(", ") || "void"}) {`,
 +    "  Env e = lib_env();",
 +    `  u64 nd = task_node(e, ${fid}, TERM_HOLE, 0, 0);`,
 +    ...body,
 +    `  corpus_eval(e.mem, term_tsk(${fid}, nd));`,
 +    ...after.length === 0 ? [`  return ${res};`]
-+      : [`  ${typeof out === "number" ? "u64" : LIB_C[out]} r = ${res};`,
-+        ...after, "  return r;"], "}"].join("\n");
++      : ty === "void" ? after : [`  ${ty} r = ${res};`, ...after,
++        "  return r;"], "}"].join("\n");
 +  });
 +  const width = Math.max(1, ...tys.map(([, ks]) => ks.split(",").length));
 +  return String.raw`// Library
@@ -326,12 +398,77 @@ index 4a7ecdd..0844209 100644
 +  return (u64)a32_load(a32_at(e.mem, H_BUMP)) << PAGE_BITS;
 +}
 +
++// bend_handles is the number of live handles, a debug export.
++u32 bend_handles(void) {
++  return BEND_LIB_SLOTS - lib_nfree;
++}
++
++// The F32 region: an Array<F32> crosses as the BEND_LIB_F32 floats of
++// bend_f32() (a power of two; the length of every Array<F32> that
++// crosses), never as a handle or a C argument. A def that takes one reads
++// the region as its array: lib_arr_in copies the region into the block the
++// library holds (allocated on first use) and hands the block to the def,
++// which owns its Array parameters. A def that returns one writes it back:
++// lib_arr_out copies the block into the region and the library holds the
++// block until the next call takes it. So between calls the region is the
++// array and the host may read or write it in place; the library owns the
++// block, the host owns nothing to free.
++
++#ifndef BEND_LIB_F32
++#define BEND_LIB_F32 16384
++#endif
++#if BEND_LIB_F32 < 1 || (BEND_LIB_F32 & (BEND_LIB_F32 - 1)) != 0
++#error "BEND_LIB_F32 must be a power of two"
++#endif
++
++static float lib_region[BEND_LIB_F32];
++static Term  lib_arr;
++static bool  lib_held;
++
++// bend_f32 is the F32 region; bend_f32_len its length in floats.
++float* bend_f32(void) {
++  return lib_region;
++}
++
++u32 bend_f32_len(void) {
++  return BEND_LIB_F32;
++}
++
++static Term lib_arr_in(Env e) {
++  Term a = lib_arr;
++  if (lib_held && blk_shr(a)) {
++    term_drop(e, a);
++    lib_held = false;
++  }
++  if (!lib_held) {
++    Term z = 0;
++    a = blk_new(e, false, cls_fit(BEND_LIB_F32), 0, 1, &z);
++  }
++  lib_held = false;
++  memcpy(blk_ptr(e.mem, term_loc(a), 0), lib_region, sizeof lib_region);
++  return a;
++}
++
++static void lib_arr_out(Env e, Term a, const char* fn) {
++  if (term_tag(a) != TAG_BUF || blk_cls(a) != cls_fit(BEND_LIB_F32)) {
++    lib_fail(fn, "an Array<F32> result whose length is not BEND_LIB_F32",
++      a);
++  }
++  memcpy(lib_region, blk_ptr(e.mem, blk_loc(e.mem, a), 0),
++    sizeof lib_region);
++  if (lib_held) {
++    blk_free(e, lib_arr);
++  }
++  lib_arr  = a;
++  lib_held = true;
++}
++
 +${fns.join("\n\n")}
 +`;
  }
 
  // JS
-@@ -3190,12 +3445,17 @@ function js_host(fl: File, k: Name): string {
+@@ -3190,12 +3567,17 @@ function js_host(fl: File, k: Name): string {
 
  // A module (for the .bend loader and -o <out>.mjs) roots and exports each
  // def a host can call.
@@ -351,7 +488,7 @@ index 4a7ecdd..0844209 100644
    const fl = file_book(book, outs ?? ["main"], true);
    for (const [k, def] of done_defs(fl, fun_runs)) {
      memo_gc();
-@@ -3238,7 +3498,7 @@ function a32_ops(f: (k: string) => string): string {
+@@ -3238,7 +3620,7 @@ function a32_ops(f: (k: string) => string): string {
  }
 
  const runtime_c = (tabs: string, spins: string, segs: string,
@@ -360,7 +497,7 @@ index 4a7ecdd..0844209 100644
 
  // Imports
  // =======
-@@ -5968,7 +6228,22 @@ static void io_step(Env e, IoWork* a) {
+@@ -5968,7 +6350,22 @@ static void io_step(Env e, IoWork* a) {
    }
  }
 
@@ -384,7 +521,7 @@ index 4a7ecdd..0844209 100644
    Env e = { H, ALC[0] };
    io_stk = pool_stack();
    signal(SIGPIPE, SIG_IGN);
-@@ -6010,16 +6285,9 @@ OUTLINE void io_loop(u64* H) {
+@@ -6010,16 +6407,9 @@ OUTLINE void io_loop(u64* H) {
      io_step(e, io_pop(&io_runs));
    }
  }
@@ -403,7 +540,7 @@ index 4a7ecdd..0844209 100644
    long thr = 0;
    int  gpu = -1;
    u64  mem = 0;
-@@ -6082,9 +6350,7 @@ int main(int argc, char** argv) {
+@@ -6082,9 +6472,7 @@ int main(int argc, char** argv) {
    io_sync();
    return 0;
  }

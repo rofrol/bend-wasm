@@ -25,10 +25,23 @@ kind is needed. `--lib` takes exactly one `-o <out>.c`. The C exports:
   error); any other closure-free datatype is a `uint64_t` handle. Other
   types (functions, open types) stop the emitter with an error naming the
   def and parameter.
+- A tuple result (`A & B`, nested ones flattened) returns its first part;
+  part i >= 1 goes through a pointer parameter `r<i>` after the def's own.
+- An `Array<F32>` crosses as the F32 region (below), never as a C value:
+  a parameter of that type has no C parameter, a result part none either
+  (the function is `void` when it is the first). At most one each way.
+- `float* bend_f32(void)`, `uint32_t bend_f32_len(void)`: the F32 region,
+  `BEND_LIB_F32` floats (`-D`, a power of two, default 16,384). A call
+  copies the region into the Bend array block the library holds
+  (allocated on first use) and the def owns that block; a returned block
+  is copied back into the region and held for the next call. So between
+  calls the region is the array; an `Array<F32>` result of another length
+  fails. `replay/robokill/` uses it for Robokill's `render`.
 - `void bend_dispose(uint64_t h)`: drops a handle's value.
 - `uint64_t bend_heap_words(void)`: debug, the heap high-water mark in
   words (pages the allocator ever took from the corpus; freed words go
   back to its lists).
+- `uint32_t bend_handles(void)`: debug, the number of live handles.
 
 In wasm, add `-sEXPORTED_FUNCTIONS=_bend_init,...`; u64 crosses as BigInt.
 

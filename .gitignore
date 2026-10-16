@@ -14,3 +14,5 @@ tests/differential/out/
 probe/lib/out/
 # Builds and logs of tests/negative/run.sh
 tests/negative/out/
+# Builds and outputs of replay/robokill/run.sh
+replay/robokill/out/
