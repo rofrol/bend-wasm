@@ -4,14 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Browser-only shipped glue (from the Node question): build the shipped [t-3wp2nvda]
-  module with `-sENVIRONMENT=web` (and `-sFILESYSTEM=0` if nothing uses a
-  file system), audit `step.wasm.mjs` and the Emscripten glue for
-  `require`, `process`, `Buffer`, `fs`, `path`, `__dirname`, `node:`; the
-  Node tests may use a Node-capable build of the same C, but the `.wasm`
-  bytes of the shipped and the tested build must be identical (a check),
-  and the shipped glue must load in the Chrome page (`bench/robokill`,
-  `probe/web`).
 - [ ] Build reproducibility (from the compiler question): `scripts/bend` [t-3rs6ne3b]
   checks Bun's exact build (`bun --revision`, not only the version) and
   `--toolchain` prints it; a check emits the C of a few programs twice
@@ -129,3 +121,11 @@ Plan and context: `docs/plan.md`.
 ## Needs a decision
 
 ## Proposed
+
+- [ ] Node benchmark out of memory at n = 2,000 (from t-3wp2nvda, run [t-m72ghzpf]
+  r-mqzurb3s): `bench/robokill/node.sh` stops with `bend: out of memory:
+  the corpus of 1425408 bytes is full`; the worker reports the same on
+  ddc00ce with the old flags (same `.wasm` bytes), so it predates the
+  shipped-glue change. Not yet reproduced by the coordinator. Find why the
+  Node run fills the corpus while the Chrome run at n = 2,000 does not, and
+  fix it or size it (docs/memory.md).

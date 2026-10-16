@@ -648,3 +648,18 @@ Frozen emcc baseline for the clang cutover criteria (from
  }
 }
 ```
+
+## Browser-only shipped glue (t-3wp2nvda)
+
+Done 2026-10-16 (run r-mqzurb3s, ae7bde5): `glue/build.sh` builds the
+shipped module with `-sENVIRONMENT=web -sFILESYSTEM=0` and a fetch-only
+wasm reader (`glue/read-web.mjs`); `--node` builds the Node-capable one
+(`-sENVIRONMENT=web,node`, `glue/read-node.mjs`) for `glue/test`, the
+differential run and the Node benchmark. `glue/test/shipped.sh` fails when
+the shipped files name a Node API or when the two `.wasm` files differ
+(wired into `glue/test/run.sh` and `bench/robokill/node.sh`). Checks
+passed in the driver's verify (whitespace, patches, differential,
+negative); the coordinator ran `bench/robokill/check.sh` (all ok) outside
+the sandbox. `probe/web/run.sh` (unchanged by this run) failed at Chrome's
+teardown; queued as t-xqgdbzz2. Open point from the worker: the Node
+benchmark's out-of-memory at n = 2,000 (Proposed).
