@@ -272,3 +272,15 @@ to Robokill's coordinator for its decision 0003.
 The user freed space (14 GiB free); the coordinator deleted the worker
 folder's regenerable `.toolchain/` cache (2.0 GiB) under the standing
 approval; 16 GiB free.
+
+## CPU-time hang guard (t-jc2zvbct)
+
+Done 2026-10-16 (run r-tbldnqua): `scripts/guard` bounds 5 s of CPU time
+(`ulimit -t 5`, same source `vendor/bend/gates/test.ts:136`); a kill is
+SIGXCPU, exit 152, reported as "timeout". Used by the differential, the
+negative checks and `probe/lib`; the Chrome guard stays wall-clock. Nested
+differential runs of the negative checks write to their own directory
+(`DIFFERENTIAL_OUT`), which may also explain run r-nmbu5kfx's failure.
+Both checks passed together beside a load average of 195. Limits: a
+program that ignores SIGXCPU or sleeps without using CPU is not stopped.
+No leftover process (checked by the coordinator).
