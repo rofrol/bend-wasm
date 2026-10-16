@@ -1,0 +1,17 @@
+Negative-check mutant (tests/negative/README.md), applied on top of the
+series: reverts patch 0002's two-word Env passing, so wasm segments take
+Env by value through musttail again.
+
+diff --git a/bend2/comp.ts b/bend2/comp.ts
+index 0844209..db1ca4e 100644
+--- a/bend2/comp.ts
++++ b/bend2/comp.ts
+@@ -3620,7 +3620,7 @@ using namespace metal;
+ #define UNLOCK(l)  __atomic_store_n(&(l), 0, __ATOMIC_RELEASE)
+ #define WL_FN      static PRESERVE(preserve_none) __attribute__((noinline)) Term
+ #define WL_CASE(F) WL_FN WL_##F(WL_SIG)
+-#if defined(__EMSCRIPTEN__)
++#if 0
+ // Wasm passes a struct by a pointer to the caller's copy, which a musttail
+ // call frees before the callee reads it: a segment takes Env's two words
+ // and rebuilds e at WL_OPEN.

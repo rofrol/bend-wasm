@@ -6,11 +6,11 @@
 # Checks: native and wasm print the same lines; their peeks equal what
 # counter.bend's own main prints (built natively, `-o bin`: the JS lane
 # takes minutes for 100,000 steps); using a disposed handle fails with
-# exit 1 and the handle message on both.
+# exit 1 and the handle message on both; the heap high-water mark at the
+# last checkpoint (100,000 steps) is no higher than at the first (10,000),
+# on both, so a leak of even one term per step fails the run.
 #
 # Output: probe/lib/out/ (ignored). Exit status: 0 when every check holds.
-# The heap numbers are reported, not judged: the kill criterion
-# (docs/decisions/0001) is read from them.
 set -u
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
@@ -35,6 +35,16 @@ fail() {
   status=1
 }
 
+# timed CMD...: runs CMD with a hang guard, as tests/differential/run.sh
+# does. The guard is not a wait for a result: it only stops a run that
+# never ends (a corrupted handle can loop forever, tests/negative), which
+# exits 142 (SIGALRM) and fails its check. Measured 2026-10-16 on an Apple
+# arm64 Mac: the drivers take 0.01 s native and 0.21 s in wasm, so 5 s
+# leaves a 20-fold margin.
+timed() {
+  perl -e 'alarm 5; exec @ARGV or exit 127' "$@"
+}
+
 step() {
   log=$out/$1.log
   shift
@@ -54,9 +64,9 @@ step native "$cc" -std=c11 -O3 "$out/counter.c" "$here/drive.c" -lpthread \
 step wasm scripts/emcc $(scripts/wasm-flags) -sMODULARIZE -sEXPORT_ES6 \
   -sEXPORTED_FUNCTIONS=$exports "$out/counter.c" -o "$out/counter.mjs"
 
-"$out/main.bin" > "$out/main.out" || fail "main exited $?"
-"$out/drive" > "$out/native.out" || fail "native driver exited $?"
-"$node" "$here/drive.mjs" "$out/counter.mjs" > "$out/wasm.out" \
+timed "$out/main.bin" > "$out/main.out" || fail "main exited $?"
+timed "$out/drive" > "$out/native.out" || fail "native driver exited $?"
+timed "$node" "$here/drive.mjs" "$out/counter.mjs" > "$out/wasm.out" \
   || fail "wasm driver exited $?"
 
 echo "native:"
@@ -72,8 +82,21 @@ peeks=$(sed -n 's/^step [0-9]* peek \([0-9]*\) .*/\1/p' "$out/native.out" \
 [ "[$peeks]" = "$(cat "$out/main.out")" ] \
   || fail "the peeks [$peeks] differ from main's $(cat "$out/main.out")"
 
+# bound NAME: the high-water check on probe/lib/out/NAME.out.
+bound() {
+  first=$(sed -n 's/^step [0-9]* peek [0-9]* heap \([0-9]*\)$/\1/p' \
+    "$out/$1.out" | head -n 1)
+  last=$(sed -n 's/^step [0-9]* peek [0-9]* heap \([0-9]*\)$/\1/p' \
+    "$out/$1.out" | tail -n 1)
+  [ -n "$first" ] && [ "$last" -le "$first" ] \
+    || fail "$1: the heap high-water grew from ${first:-?} words at the first" \
+      "checkpoint to ${last:-?} at the last"
+}
+bound native
+bound wasm
+
 misuse() {
-  "$@" --misuse > /dev/null 2> "$out/misuse.err"
+  timed "$@" --misuse > /dev/null 2> "$out/misuse.err"
   code=$?
   grep -q '^bend: peek: a handle that was consumed, disposed or never made' \
     "$out/misuse.err" && [ "$code" = 1 ] \
@@ -83,5 +106,5 @@ misuse "$out/drive"
 misuse "$node" "$here/drive.mjs" "$out/counter.mjs"
 
 rm -rf "$out/tmp"
-[ "$status" = 0 ] && echo "ok: peeks equal (native, wasm, main); misuse fails on both"
+[ "$status" = 0 ] && echo "ok: peeks equal (native, wasm, main); heap flat; misuse fails on both"
 exit $status

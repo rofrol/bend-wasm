@@ -1,0 +1,17 @@
+Negative-check mutant (tests/negative/README.md), applied on top of the
+series: lib_take no longer checks that a handle is live and of its
+generation, so a consumed or disposed handle is used as if it were live.
+
+diff --git a/bend2/comp.ts b/bend2/comp.ts
+index 0844209..652c393 100644
+--- a/bend2/comp.ts
++++ b/bend2/comp.ts
+@@ -3072,7 +3072,7 @@ void bend_init(void) {
+ static LibSlot* lib_take(u64 h, u32 type, const char* fn) {
+   u32 i = (u32)h;
+   LibSlot* s = i < BEND_LIB_SLOTS ? &lib_slots[i] : NULL;
+-  if (s == NULL || !s->live || s->gen != (u32)(h >> 32)) {
++  if (s == NULL) {
+     lib_fail(fn, "a handle that was consumed, disposed or never made", h);
+   }
+   if (type != ~0u && s->type != type) {

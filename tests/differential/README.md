@@ -10,9 +10,11 @@ sh tests/differential/run.sh
 ```
 
 It prints one line per program and lane (`ok`, `DIFFERS`, `FAILED` with the
-reason, `not available`) and a summary, writes everything to
-`tests/differential/out/` (ignored), and exits 0 only when every program
-matched native on every available lane.
+reason) and a summary, writes everything to `tests/differential/out/`
+(ignored), and exits 0 only when every program matched native on every lane
+in `LANES` (default `js wasm`). A lane in `LANES` that cannot be built
+here fails the run at once, before any program, so a missing lane is never
+a silent pass.
 
 The native and JS lanes build a program as Bend's own gate does
 (`vendor/bend/gates/test.ts`); all lanes go through `scripts/bend`:
@@ -23,9 +25,13 @@ The native and JS lanes build a program as Bend's own gate does
 | js | `scripts/bend P -o P.js` | `bun P.js`, the Bun `scripts/bend` pins, with the gate's `BUN_JSC_maxPerThreadStackUsage` |
 | wasm | `scripts/bend P -o P.c`, then `scripts/emcc $(scripts/wasm-flags) P.c -o P.js` (the probe's `w32-patched` target: wasm32, `-mtail-call`, fixed 528 MB memory; `docs/probe.md`) | `node P.js`, the Node of the pinned Emscripten SDK |
 
-The wasm lane needs patches 0001 and 0002: under `BEND_PATCH=0` it reports
-`not available` for every program, and the run compares native and JS
-only.
+The wasm lane needs patches 0001 and 0002, so under `BEND_PATCH=0` it is
+not available and the default run fails. A run of the unpatched pin names
+its lanes explicitly:
+
+```sh
+BEND_PATCH=0 LANES=js sh tests/differential/run.sh
+```
 
 A lane is a name in `lanes` plus its `lane_build_<name>` and
 `lane_run_<name>` functions in `run.sh`. Each run has a 5 s hang guard,

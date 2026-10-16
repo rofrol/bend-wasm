@@ -1,0 +1,16 @@
+Negative-check mutant (tests/negative/README.md), applied on top of the
+series: library mode allocates one more task node per exported call and
+never frees it, so the heap high-water grows with every step.
+
+diff --git a/bend2/comp.ts b/bend2/comp.ts
+index 0844209..62c173e 100644
+--- a/bend2/comp.ts
++++ b/bend2/comp.ts
+@@ -3003,6 +3003,7 @@ function lib_c(fl: File, outs: Name[]): string {
+       ps.join(", ") || "void"}) {`,
+     "  Env e = lib_env();",
+     `  u64 nd = task_node(e, ${fid}, TERM_HOLE, 0, 0);`,
++    `  task_node(e, ${fid}, TERM_HOLE, 0, 0);`,
+     ...body,
+     `  corpus_eval(e.mem, term_tsk(${fid}, nd));`,
+     ...after.length === 0 ? [`  return ${res};`]

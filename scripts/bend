@@ -8,6 +8,9 @@
 # copy of the pin, .toolchain/<pin>-<series hash>, published by rename so a
 # half-built copy is never used; vendor/bend stays a clean checkout.
 # BEND_PATCH=0, or an empty series, runs vendor/bend as it is.
+# BEND_PATCH_EXTRA="a.patch b.patch" (paths relative to the repository)
+# appends patches to the series, for tests/negative's mutants only; they
+# are part of the series hash, so each mutant gets its own copy.
 #
 # The compiler is a Bun program; the Bun version is pinned here too, and
 # the Emscripten version is printed for the record by
@@ -24,6 +27,13 @@ fi
 pin=$(git -C "$src" rev-parse HEAD)
 # The series in name order; patch names never contain spaces.
 patches=$(cd "$root" && for p in patches/*.patch; do [ -f "$p" ] && echo "$p"; done || true)
+for p in ${BEND_PATCH_EXTRA:-}; do
+  if [ ! -f "$root/$p" ]; then
+    echo "scripts/bend: BEND_PATCH_EXTRA: no $p in $root" >&2
+    exit 1
+  fi
+  patches="$patches $p"
+done
 if [ -z "$patches" ]; then
   series="none"
 elif [ "${BEND_PATCH:-1}" = 0 ]; then

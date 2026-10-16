@@ -12,3 +12,5 @@ tests/differential/out/
 .toolchain/
 # Generated C, builds and outputs of probe/lib/run.sh
 probe/lib/out/
+# Builds and logs of tests/negative/run.sh
+tests/negative/out/

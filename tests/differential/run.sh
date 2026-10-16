@@ -11,16 +11,18 @@
 # Output: tests/differential/out/ (ignored), per program and lane the build
 # log, stdout, stderr and exit code, and summary.txt.
 # Exit status: 0 when every program in the corpus matched native on every
-# available lane.
+# lane in LANES. A lane in LANES that cannot be built here (wasm under
+# BEND_PATCH=0) fails the run at once; LANES=js is the explicit opt-out for
+# a pin-only run.
 set -u
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 here=tests/differential
 out=$here/out
-# The lanes compared with native, in order. A lane is one more name here and
-# its lane_build_<name> and lane_run_<name> functions below; a listed lane
-# without them is reported as not available.
-lanes='js wasm'
+# The lanes compared with native, in order (LANES overrides the list). A
+# lane is one more name here and its lane_build_<name> and lane_run_<name>
+# functions below.
+lanes=${LANES:-js wasm}
 
 # Same Bun as scripts/bend, which checks its version on every build.
 bun=${BEND_BUN:-$(command -v bun || true)}
@@ -73,7 +75,7 @@ lane_run_js() {
   timed "$bun" "$1.js"
 }
 # The wasm target needs patches 0001 and 0002 (docs/probe.md): under
-# BEND_PATCH=0 the lane is not available.
+# BEND_PATCH=0 the lane is not available, and the run needs LANES=js.
 if [ "${BEND_PATCH:-1}" != 0 ]; then
   lane_build_wasm() {
     if [ -z "$node" ]; then
@@ -89,14 +91,18 @@ if [ "${BEND_PATCH:-1}" != 0 ]; then
   }
 fi
 
+for lane in $lanes; do
+  if ! type "lane_build_$lane" > /dev/null 2>&1; then
+    say "$lane: FAILED, not available (BEND_PATCH=${BEND_PATCH:-1});" \
+      "set LANES to the lanes this run should compare, e.g. LANES=js"
+    exit 1
+  fi
+done
+
 # run_lane LANE SRC BASE: builds and runs SRC on LANE into BASE.LANE.*;
 # prints "" when it ran, else the reason it did not.
 run_lane() {
   b=$3.$1
-  if ! type "lane_build_$1" > /dev/null 2>&1; then
-    echo "not available"
-    return
-  fi
   if ! lane_build_"$1" "$2" "$b" > "$b.build.log" 2>&1; then
     echo "build failed: $(head -n 1 "$b.build.log")"
     return
@@ -130,9 +136,7 @@ while read -r src rest; do
   say "$p native: ran, exit $(cat "$base.native.code")"
   for lane in $lanes; do
     why=$(run_lane "$lane" "$src" "$base")
-    if [ "$why" = "not available" ]; then
-      say "$p $lane: not available"
-    elif [ -n "$why" ]; then
+    if [ -n "$why" ]; then
       say "$p $lane: FAILED, $why"
       status=1
     elif ! cmp -s "$base.$lane.out" "$base.native.out"; then
@@ -151,7 +155,6 @@ done < "$here/corpus.txt"
 say ""
 say "programs: $programs; ok: $(grep -c ': ok$' "$summary")," \
   "DIFFERS: $(grep -c ': DIFFERS' "$summary")," \
-  "FAILED: $(grep -c ': FAILED' "$summary")," \
-  "not available: $(grep -c ': not available$' "$summary")"
+  "FAILED: $(grep -c ': FAILED' "$summary"); lanes: native $lanes"
 rm -rf "$out/tmp"
 exit $status
