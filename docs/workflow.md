@@ -40,9 +40,30 @@ themselves; `scripts/bend` stops with that command when it is missing.
   checks that `emcc --version` reports the pin, and fails with the install
   commands otherwise. `BEND_WASM_EMSDK=/path/to/emsdk` points to another
   install of the same pin.
-- `scripts/bend --toolchain` prints the Bend tag and commit, the Bun
-  version and the first line of `scripts/emcc --version`; record it with
-  results.
+- `scripts/bend --toolchain` prints the Bend tag and commit, the patch
+  series (below), the Bun version and the first line of
+  `scripts/emcc --version`; record it with results.
+
+## Patches
+
+Our changes to Bend are a series of `patches/NNNN-short-name.patch` files,
+each with a header naming the upstream change that retires it; the
+convention and how to make one are in `patches/README.md`. `vendor/bend`
+stays a clean checkout of the pin.
+
+- When the series is not empty, `scripts/bend` copies the pinned commit
+  into `.toolchain/<pin>-<first 16 hex of the series' sha256>` (ignored),
+  applies the series there and runs the compiler from that copy. The copy
+  is published by rename, so a half-built one is never used, and it is
+  reused until the pin or a patch changes. A patch that does not apply
+  stops the build with its name and publishes nothing.
+- `BEND_PATCH=0 scripts/bend ...` runs the unpatched pin, for comparing.
+- `scripts/check-patches` (herdr check `patches`) verifies that
+  `vendor/bend` is at the pinned commit, that every patch applies cleanly
+  in order to a fresh copy of it, and that every patch has a `Retired by:`
+  line; with no patches it prints `no patches`.
+- Moving the Bend pin means rebasing the series onto the new commit, in
+  its own commit, with `scripts/check-patches` passing.
 
 ## Installing the SDK on a new machine
 

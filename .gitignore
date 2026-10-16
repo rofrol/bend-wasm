@@ -6,3 +6,5 @@
 probe/out/
 # Builds and outputs of tests/differential/run.sh
 tests/differential/out/
+# Patched copies of the pinned Bend built by scripts/bend (patches/README.md)
+.toolchain/

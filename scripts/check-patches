@@ -1,0 +1,47 @@
+#!/bin/sh
+# Checks the patch series (patches/README.md): vendor/bend is checked out
+# at exactly the commit this repository pins, every patch applies cleanly,
+# in name order, to a fresh copy of that commit, and every patch names the
+# upstream change that retires it ("Retired by:").
+set -eu
+root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$root"
+patches=$(for p in patches/*.patch; do [ -f "$p" ] && echo "$p"; done || true)
+if [ -z "$patches" ]; then
+  echo "no patches"
+  exit 0
+fi
+src=vendor/bend
+if [ ! -f "$src/bend2/main.ts" ]; then
+  echo "scripts/check-patches: vendor/bend is not checked out; run:" >&2
+  echo "  git submodule update --init --depth 1 vendor/bend" >&2
+  exit 1
+fi
+pin=$(git ls-tree HEAD vendor/bend | awk '{print $3}')
+have=$(git -C "$src" rev-parse HEAD)
+if [ "$have" != "$pin" ]; then
+  echo "scripts/check-patches: vendor/bend is at $have, the pin is $pin" >&2
+  exit 1
+fi
+# The scratch copy sits in the ignored .toolchain/, beside scripts/bend's.
+mkdir -p .toolchain
+tmp=$root/.toolchain/check.$$
+rm -rf "$tmp"
+mkdir "$tmp"
+trap 'rm -rf "$tmp"' EXIT
+trap 'exit 1' HUP INT TERM
+git -C "$src" archive HEAD | tar -x -C "$tmp"
+fail=0
+for p in $patches; do
+  if ! sed '/^diff --git /q' "$p" | grep -q '^Retired by: *[^ ]'; then
+    echo "scripts/check-patches: $p has no \"Retired by:\" line in its header" >&2
+    fail=1
+  fi
+  # The ceiling keeps git apply from finding a repository above $tmp.
+  if ! (cd "$tmp" && GIT_CEILING_DIRECTORIES=$root/.toolchain git apply "$root/$p"); then
+    echo "scripts/check-patches: $p does not apply to bend $pin" >&2
+    exit 1
+  fi
+  echo "ok $p"
+done
+exit $fail

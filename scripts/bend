@@ -4,6 +4,11 @@
 # wasm build depends on the C the pinned compiler emits, so the pin decides
 # how every program behaves (docs/plan.md, "Goal").
 #
+# Our patch series (patches/*.patch, patches/README.md) goes on a cached
+# copy of the pin, .toolchain/<pin>-<series hash>, published by rename so a
+# half-built copy is never used; vendor/bend stays a clean checkout.
+# BEND_PATCH=0, or an empty series, runs vendor/bend as it is.
+#
 # The compiler is a Bun program; the Bun version is pinned here too, and
 # the Emscripten version is printed for the record by
 # `scripts/bend --toolchain`.
@@ -16,6 +21,43 @@ if [ ! -f "$src/bend2/main.ts" ]; then
   echo "  git submodule update --init --depth 1 vendor/bend" >&2
   exit 1
 fi
+pin=$(git -C "$src" rev-parse HEAD)
+# The series in name order; patch names never contain spaces.
+patches=$(cd "$root" && for p in patches/*.patch; do [ -f "$p" ] && echo "$p"; done || true)
+if [ -z "$patches" ]; then
+  series="none"
+elif [ "${BEND_PATCH:-1}" = 0 ]; then
+  series="off (BEND_PATCH=0)"
+else
+  # Names and contents, in order, so a rename or reorder is a new copy.
+  sum=$(cd "$root" && for p in $patches; do echo "$p"; cat "$p"; done | shasum -a 256 | cut -c1-16)
+  series="$sum $(echo $patches | sed 's|patches/||g')"
+  dest=$root/.toolchain/$pin-$sum
+  if [ ! -f "$dest/bend2/main.ts" ]; then
+    mkdir -p "$root/.toolchain"
+    tmp=$root/.toolchain/tmp.$$
+    trap 'rm -rf "$tmp"' EXIT
+    trap 'exit 1' HUP INT TERM
+    rm -rf "$tmp"
+    mkdir "$tmp"
+    # Exactly the pinned commit's tree, without .git.
+    git -C "$src" archive HEAD | tar -x -C "$tmp"
+    for p in $patches; do
+      # The ceiling keeps git apply from finding this repository above
+      # $tmp, so the patch's paths stay relative to the copy.
+      if ! (cd "$tmp" && GIT_CEILING_DIRECTORIES=$root/.toolchain git apply "$root/$p"); then
+        echo "scripts/bend: $p does not apply to bend $pin" >&2
+        exit 1
+      fi
+    done
+    # rename(2) fails when a concurrent builder published first; its copy
+    # is then used and ours is removed.
+    perl -e 'rename($ARGV[0], $ARGV[1])' "$tmp" "$dest" || true
+    rm -rf "$tmp"
+    trap - EXIT HUP INT TERM
+  fi
+  src=$dest
+fi
 bun=${BEND_BUN:-$(command -v bun || true)}
 if [ -z "$bun" ]; then
   echo "scripts/bend: bun not found (need $want_bun; set BEND_BUN)" >&2
@@ -27,7 +69,8 @@ if [ "$have_bun" != "$want_bun" ]; then
   exit 1
 fi
 if [ "${1:-}" = "--toolchain" ]; then
-  echo "bend $(git -C "$src" describe --tags --always) $(git -C "$src" rev-parse HEAD)"
+  echo "bend $(git -C "$root/vendor/bend" describe --tags --always) $pin"
+  echo "patches: $series"
   echo "bun $have_bun"
   "$root/scripts/emcc" --version | head -n 1
   exit 0
