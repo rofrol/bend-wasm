@@ -21,6 +21,13 @@ and cannot write outside their folder: it is installed once per machine
 `scripts/emcc` sets `EM_CACHE` to the repository's `.cache/emscripten`
 (ignored).
 
+Without network, herdr's worker folder
+(`../herdr-worktrees/bend-wasm/worker`, relative to the repository) has no
+`vendor/bend` checkout until the coordinator runs
+`git submodule update --init --depth 1 vendor/bend` in that folder, before
+dispatching an item that runs `scripts/bend`. Workers never fetch it
+themselves; `scripts/bend` stops with that command when it is missing.
+
 ## Running the tools
 
 - Build, check and run Bend only with `scripts/bend`, never a global
@@ -54,7 +61,8 @@ the rerun checks in its message or results:
 
 - Bend: check out the new tag in `vendor/bend` (shallow), update the tag
   and commit in this file, and update `want_bun` in `scripts/bend` if the
-  release needs another Bun.
+  release needs another Bun. The coordinator then updates `vendor/bend` in
+  herdr's worker folder the same way.
 - Bun: change `want_bun` in `scripts/bend` and the table above.
 - Emscripten: install the new SDK into `~/.cache/bend-wasm/emsdk-<ver>` as
   above, change `want` in `scripts/emcc` and the table above.
