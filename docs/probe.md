@@ -287,3 +287,34 @@ Stack size (before the fix above): the 48 programs that ran matched native with 
 2^9 bytes up; at 2^8, `float_printing` and `fork_shared_flat` stop with
 the stack overflow error, and at 2^7 and 2^6 more programs do, every one
 with that error, never with wrong output.
+
+## Browser
+
+TODO item t-2zouc2um, 2026-10-16. `probe/web/run.sh` builds `hello` and
+`arith` with `scripts/wasm-flags` plus `-sENVIRONMENT=web -sSINGLE_FILE=1
+-sWASM_ASYNC_COMPILATION=0 -sEXIT_RUNTIME=1`: the wasm is embedded in the
+JS, so `probe/web/index.html?p=NAME` works from `file://`; it compiles
+synchronously, so the program has run before the load event; no
+`-pthread`, so the page needs no COOP/COEP and the build uses no
+`SharedArrayBuffer`. The page writes the program's stdout, exit code and
+`crossOriginIsolated` into the DOM; the script dumps it with headless
+Chrome (`--headless=new --disable-gpu --dump-dom`, a fresh
+`--user-data-dir`) and requires the stdout to equal the native binary's,
+exit 0, and `crossOriginIsolated` false. Outputs: `probe/web/out/`.
+
+| Browser | Version | Result |
+| --- | --- | --- |
+| Google Chrome (headless) | 155.0.8059.80 | `hello` and `arith` match native, exit 0; `file://`, not cross-origin isolated |
+| Safari | | not tried |
+| Firefox | | not tried |
+
+The Chrome row is from `sh probe/web/run.sh` at commit 262101c (bend
+79df8d9 with patches `c5d621479256611c`, emcc 6.0.10), run by the
+coordinator outside the herdr worker sandbox. `probe/web/run.sh` cannot
+run inside that sandbox: Chrome stops there with
+`sandbox_extension_issue_file_to_process failed ... (Operation not
+permitted)` and `Failed to create a ProcessSingleton for your profile
+directory`, exit 21, before loading the page.
+
+Tail calls (`-mtail-call`) are a feature of the engine, not of the page:
+Chrome has them (since 112); Safari and Firefox were not tried.

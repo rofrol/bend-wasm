@@ -4,6 +4,8 @@
 *.md.lock
 # Generated C and build outputs of probe/run.sh
 probe/out/
+# Builds, dumped pages and Chrome profiles of probe/web/run.sh
+probe/web/out/
 # Builds and outputs of tests/differential/run.sh
 tests/differential/out/
 # Patched copies of the pinned Bend built by scripts/bend (patches/README.md)

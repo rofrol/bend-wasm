@@ -5,7 +5,7 @@
 [checks]
 # An explicit parent-to-head diff also checks merge commits, unlike git show.
 whitespace = ["git", "diff", "--check", "HEAD^", "HEAD"]
-# Native vs JS lane on the corpus of tests/differential/corpus.txt (README there).
+# Native vs the JS and wasm lanes on the corpus of tests/differential/corpus.txt (README there).
 differential = ["sh", "tests/differential/run.sh"]
 # The Bend patch series applies cleanly to exactly the pinned commit (patches/README.md).
 patches = ["sh", "scripts/check-patches"]

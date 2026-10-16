@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- Runs one probe program built by probe/web/run.sh in a plain page:
+     index.html?p=NAME loads out/NAME.js (wasm embedded, SINGLE_FILE), no
+     pthreads, no COOP/COEP headers (file:// sends none). The program's
+     stdout goes to #stdout, its exit code to #exit; #isolated records
+     crossOriginIsolated. The build compiles the wasm synchronously
+     (WASM_ASYNC_COMPILATION=0), so the program has run before the load
+     event and Chrome's --dump-dom sees its whole output. -->
+<meta charset="utf-8">
+<title>bend-wasm probe</title>
+<p>crossOriginIsolated: <span id="isolated"></span></p>
+<p>userAgent: <span id="agent"></span></p>
+<p>exit: <span id="exit">none</span></p>
+<pre id="stdout"></pre>
+<pre id="stderr"></pre>
+<script>
+  document.getElementById('isolated').textContent = String(self.crossOriginIsolated);
+  document.getElementById('agent').textContent = navigator.userAgent;
+  var stdout = document.getElementById('stdout');
+  var stderr = document.getElementById('stderr');
+  var Module = {
+    print: function (line) { stdout.textContent += line + '\n'; },
+    printErr: function (line) { stderr.textContent += line + '\n'; },
+    onExit: function (code) { document.getElementById('exit').textContent = String(code); },
+  };
+  var program = new URLSearchParams(location.search).get('p');
+  if (!/^[a-z0-9_]+$/.test(program || '')) {
+    stderr.textContent = 'no program: open index.html?p=NAME\n';
+  } else {
+    // A parser-inserted script runs before the load event, unlike one
+    // added with createElement. SINGLE_FILE embeds the wasm as UTF-8
+    // encoded bytes, so the script must be read as UTF-8.
+    document.write('<script charset="utf-8" src="out/' + program + '.js"><\/script>');
+  }
+</script>
