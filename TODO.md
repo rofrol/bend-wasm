@@ -131,10 +131,6 @@ Plan and context: `docs/plan.md`.
   program that fails, a page that never runs it) that the coordinator runs
   outside the sandbox to show the check still fails.
 
-## Needs a decision
-
-## Proposed
-
 - [ ] Node benchmark out of memory at n = 2,000 (from t-3wp2nvda, run [t-m72ghzpf]
   r-mqzurb3s): `bench/robokill/node.sh` stops with `bend: out of memory:
   the corpus of 1425408 bytes is full`; the worker reports the same on
@@ -142,6 +138,7 @@ Plan and context: `docs/plan.md`.
   shipped-glue change. Not yet reproduced by the coordinator. Find why the
   Node run fills the corpus while the Chrome run at n = 2,000 does not, and
   fix it or size it (docs/memory.md).
+  Decided by the user 2026-10-16 (d-c2aqguer): approved.
 
 - [ ] Differential check's temp dir deleted mid-run (from t-dyxn2pn3, run [t-vdfibz6b]
   r-tqd3miak, verify event 178884, 2026-10-16 ~21:47): in herdr's verify,
@@ -156,3 +153,8 @@ Plan and context: `docs/plan.md`.
   run its own output under `out/` (or refuse a concurrent run with a lock
   naming the holder), and keep the first failing program's full message in
   the summary, since verify keeps only the tail.
+  Decided by the user 2026-10-16 (d-c2aqguer): approved.
+
+## Needs a decision
+
+## Proposed
