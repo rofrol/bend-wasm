@@ -94,8 +94,10 @@ instance (`a State handle of an instance before reset()`), because a new
 instance numbers its slots from scratch and an old handle could otherwise
 name a new value. A fresh import (`import("./step.wasm.mjs?2")`) is a
 separate instance too, but `reset()` is the documented way, as the host
-keeps its `G`. Each instance has its own 528 MB memory; the old one is
-freed once nothing refers to it.
+keeps its `G`. Each instance has its own linear memory, sized by the
+linker from `scripts/wasm-flags` (the static corpus and Term stack, the
+stack and a 1 MiB heap; 11 MiB for Robokill, `docs/memory.md`); the old
+one is freed once nothing refers to it.
 
 Errors the glue finds before entering wasm (not a handle of this module,
 a handle from before `reset()`, a `Float32Array` of the wrong length, a

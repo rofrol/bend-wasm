@@ -663,16 +663,17 @@ corpus is 1,425,408 bytes (1.36 MiB, 1,289 heap pages).
 Past it, the runtime's out-of-memory error ends the run:
 
 - `probe/exhaust.bend` (77,825 live list cells) stops with "bend: out of
-  memory: run again with a bigger span, as in --gpu 8GB", exit 1, and
+  memory: the corpus of 1425408 bytes is full; build with a bigger
+  -DBEND_CORPUS_BYTES=..." (the wasm text since t-ouy36at5; it named
+  `--gpu 8GB` before), exit 1, and
   `probe/exhaust-fit.bend` (77,824) runs and matches native.
 - Robokill's library built with a 250-page corpus
   (`-DBEND_CORPUS_BYTES=278528`) stops in the n = 2,000 replay with the
   same message, exit 1 (one-off, not committed).
 - `tests/negative`'s leak mutant (a task node per library call) at the
-  default corpus stops the same way between steps 10,000 and 20,000. So
-  `probe/lib/run.sh` builds its wasm module with a 16 MiB corpus: its
-  heap bound must see that leak grow to the 100,000-step checkpoint
-  (815,232 words), as the negative check requires.
+  default corpus stops the same way between steps 10,000 and 20,000;
+  `tests/negative` accepts that error as detection on wasm, so
+  `probe/lib/run.sh` builds with the default corpus (t-ouy36at5).
 
 The message names a GPU flag a wasm build does not have; its text is
 shared with the JS lane (`ERRS` in `comp.ts`) and was left as it is.

@@ -76,7 +76,9 @@ compile the same C and behave as before. The target is wasm32 with
   correct, only slower.
 - corpus_grow fails at once, so a full corpus ends in the runtime's
   out-of-memory error (ERR_HEAP): memory growth is off and the corpus is
-  taken once.
+  taken once. Its text there names the corpus size and
+  -DBEND_CORPUS_BYTES instead of the --gpu flag a wasm build lacks
+  (err_post; ERRS in comp.ts, shared with the JS lane, is unchanged).
 - Unsupported effects fail loudly when reached, through err_fail:
   io_wait_on (every timer or stream wait that would lead to io_wait's
   blocking select), io_work (the helper pthread of files, processes and
@@ -103,7 +105,7 @@ Retired by: an upstream Emscripten/wasm mode of Bend's C runtime
 (https://github.com/bendlang/bend/issues/1598).
 
 diff --git a/bend2/comp.ts b/bend2/comp.ts
-index 5a869ac..1f91627 100644
+index 5a869ac..aa56dcd 100644
 --- a/bend2/comp.ts
 +++ b/bend2/comp.ts
 @@ -2851,8 +2851,8 @@ export function compile_book(book: Bend.Book): string {
@@ -186,7 +188,30 @@ index 5a869ac..1f91627 100644
 
  static const char* CLI_HELP =
    "usage: %s [options] [arguments]\n"
-@@ -4678,10 +4710,30 @@ static void* pool_mmap(u64 bytes) {
+@@ -3684,7 +3716,22 @@ static void err_fail(const char* msg) {
+   _exit(1);
+ }
+
++#if defined(__EMSCRIPTEN__)
++static u64 corpus_size;
++#endif
++
+ static void err_post(u64* H, u32 code) {
++#if defined(__EMSCRIPTEN__)
++  // ERR_TEXT's advice names --gpu, which wasm lacks: its corpus is static
++  // storage sized when the module is built, and never grows.
++  if (code == ERR_HEAP) {
++    char msg[160];
++    snprintf(msg, sizeof msg, "out of memory: the corpus of %llu bytes is"
++      " full; build with a bigger -DBEND_CORPUS_BYTES=...",
++      (unsigned long long)corpus_size);
++    err_fail(msg);
++  }
++#endif
+   err_fail(ERR_TEXT[code]);
+ }
+
+@@ -4678,10 +4725,30 @@ static void* pool_mmap(u64 bytes) {
  }
 
  // The machine stack of each thread; -D BEND_STACK_BYTES=... changes it.
@@ -217,7 +242,7 @@ index 5a869ac..1f91627 100644
  static Term* pool_stack(void) {
    u64   len = BEND_STACK_BYTES;
    char* p   = pool_mmap(len + 16384 + SIGSTKSZ);
-@@ -4695,6 +4747,7 @@ static Term* pool_stack(void) {
+@@ -4695,6 +4762,7 @@ static Term* pool_stack(void) {
    sigaction(SIGBUS, &sa, NULL);
    return (Term*)p;
  }
@@ -225,7 +250,7 @@ index 5a869ac..1f91627 100644
 
  // A wait yields a while before it sleeps, so a turn that ends (or follows)
  // within microseconds never pays a condvar wake.
-@@ -5186,11 +5239,35 @@ static void cube_run(u64* H, bool gpu) {
+@@ -5186,11 +5254,35 @@ static void cube_run(u64* H, bool gpu) {
 
  static u64 corpus_size;
 
@@ -262,7 +287,7 @@ index 5a869ac..1f91627 100644
  static void* corpus_map(u64 size) {
    u64   hint = 1ull << 45;
    void* p    = MAP_FAILED;
-@@ -5216,13 +5293,23 @@ static void* corpus_map(u64 size) {
+@@ -5216,13 +5308,23 @@ static void* corpus_map(u64 size) {
    }
    return p;
  }
@@ -286,7 +311,7 @@ index 5a869ac..1f91627 100644
    cap = cap < ~0u ? cap : ~0u - 1;
    u64 at = HEAP_OFF + (cap << PAGE_BITS);
    for (u32 c = 0; c < NCLS_ALL; c += 1) {
-@@ -5236,6 +5323,11 @@ static void corpus_lay(u64* H, u64 size) {
+@@ -5236,6 +5338,11 @@ static void corpus_lay(u64* H, u64 size) {
  }
 
  static bool corpus_grow(u64* H, u64 need) {
@@ -298,7 +323,7 @@ index 5a869ac..1f91627 100644
    bool ok = true;
    LOCK(bank_lock);
    while (ok && need > a32_load(a32_at(H, H_CAP))) {
-@@ -5389,6 +5481,10 @@ OUTLINE void* io_mem(void* mem) {
+@@ -5389,6 +5496,10 @@ OUTLINE void* io_mem(void* mem) {
  }
 
  static int io_sys_addr(const char* host, u32 port, struct sockaddr_in* at) {
@@ -309,7 +334,7 @@ index 5a869ac..1f91627 100644
    memset(at, 0, sizeof(*at));
    at->sin_family = AF_INET;
    at->sin_port   = htons((uint16_t)port);
-@@ -5458,6 +5554,12 @@ static void io_park_add(IoWork* w) {
+@@ -5458,6 +5569,12 @@ static void io_park_add(IoWork* w) {
  }
 
  static Term io_wait_on(IoWork* w, int fd, short evts, u64 time, IoPack more) {
@@ -322,7 +347,7 @@ index 5a869ac..1f91627 100644
    w->word = (u32)fd;
    w->pack = more;
    w->time = time;
-@@ -5649,6 +5751,12 @@ static void* io_help(void* arg) {
+@@ -5649,6 +5766,12 @@ static void* io_help(void* arg) {
  }
 
  static Term io_work(IoWork* w, IoCall call, IoPack pack) {
@@ -335,7 +360,7 @@ index 5a869ac..1f91627 100644
    w->call  = call;
    w->pack  = pack;
    io_busy += 1;
-@@ -6005,6 +6113,13 @@ int main(int argc, char** argv) {
+@@ -6005,6 +6128,13 @@ int main(int argc, char** argv) {
        io_argv[io_argc++] = argv[i];
      }
    }

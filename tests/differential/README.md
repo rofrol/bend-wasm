@@ -23,7 +23,7 @@ The native and JS lanes build a program as Bend's own gate does
 | --- | --- | --- |
 | native | `scripts/bend P -o P.bin` (clang `-O3`) | `./P.bin` |
 | js | `scripts/bend P -o P.js` | `bun P.js`, the Bun `scripts/bend` pins, with the gate's `BUN_JSC_maxPerThreadStackUsage` |
-| wasm | `scripts/bend P -o P.c`, then `scripts/emcc $(scripts/wasm-flags) P.c -o P.js` (the probe's `w32-patched` target: wasm32, `-mtail-call`, fixed 528 MB memory; `docs/probe.md`) | `node P.js`, the Node of the pinned Emscripten SDK |
+| wasm | `scripts/bend P -o P.c`, then `scripts/emcc $(scripts/wasm-flags) P.c -o P.js` (the probe's `w32-patched` target: wasm32, `-mtail-call`, a fixed memory the linker sizes per program, no growth; `docs/probe.md`) | `node P.js`, the Node of the pinned Emscripten SDK |
 
 The wasm lane needs patches 0001 and 0002, so under `BEND_PATCH=0` it is
 not available and the default run fails. A run of the unpatched pin names

@@ -64,15 +64,13 @@ step lib scripts/bend "$here/counter.bend" -o "$out/counter.c" \
   --lib init,step,peek
 step native "$cc" -std=c11 -O3 "$out/counter.c" "$here/drive.c" -lpthread \
   -lm -o "$out/drive"
-# The heap bound must show a leak as growth on both lanes. A leak of one
-# task node per call (tests/negative's leak mutant) reaches 815,232 words
-# at 100,000 steps; the default wasm corpus (1,280 heap pages, patch 0002)
-# would stop it with ERR_HEAP before the last checkpoint. So the wasm
-# build gets a 16 MiB corpus (15,194 pages, 1,944,832 words); the counter
-# itself needs 129 pages.
+# The default wasm corpus (1,280 heap pages, patch 0002), as shipped; the
+# counter needs 129 pages. A leak of one task node per call
+# (tests/negative's leak mutant) shows natively as the high-water growing
+# and in wasm as ERR_HEAP's out-of-memory error, between steps 10,000 and
+# 20,000; tests/negative accepts either as detection on wasm.
 # shellcheck disable=SC2046 # the flags are words on purpose
-step wasm scripts/emcc $(scripts/wasm-flags) -DBEND_CORPUS_BYTES=16777216 \
-  -sMODULARIZE -sEXPORT_ES6 \
+step wasm scripts/emcc $(scripts/wasm-flags) -sMODULARIZE -sEXPORT_ES6 \
   -sEXPORTED_FUNCTIONS=$exports "$out/counter.c" -o "$out/counter.mjs"
 
 timed "$out/main.bin" > "$out/main.out" || {

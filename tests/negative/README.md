@@ -28,7 +28,7 @@ below come from the mutants.
 
 | Case | Known-bad build | Check that must fail, and its message |
 | --- | --- | --- |
-| leak | `leak.patch`: every library-mode call allocates a task node it never frees | `probe/lib/run.sh`: `FAILED: native` and `FAILED: wasm: the heap high-water grew ...` (the mark at 100,000 steps above the mark at 10,000), and nothing else |
+| leak | `leak.patch`: every library-mode call allocates a task node it never frees | `probe/lib/run.sh`: `FAILED: native: the heap high-water grew ...` (the mark at 100,000 steps above the mark at 10,000); in wasm the same message, or the runtime's out-of-memory error (`ERR_HEAP`, `bend: out of memory: ...`) when the default corpus fills first, with only its consequences (the wasm drivers exit 1, their output differs from native's); nothing else |
 | stale | real series: `consumed.c` and `consumed.mjs` peek a handle `step` consumed | `bend: peek: a handle that was consumed, disposed or never made` and exit 1, natively and in wasm |
 | stale | `stale-handle.patch`: `lib_take` no longer checks liveness and generation | `probe/lib/run.sh`: `a disposed handle gave exit ...` for both drivers (they loop until the hang guard stops them), and nothing else |
 | env-abi | `env-abi.patch`: reverts patch 0002's two-word `Env` passing | `LANES=wasm tests/differential/run.sh`: exactly `reg_nat_chain`, `run_bst_insert`, `run_string_algorithms` DIFFER or FAIL on the wasm lane |

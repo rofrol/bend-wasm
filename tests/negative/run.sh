@@ -56,18 +56,35 @@ fi
 cp probe/lib/out/counter.c probe/lib/out/counter.mjs probe/lib/out/counter.wasm \
   "$out/"
 
-# 1. Leak: library mode leaks a task node per call; probe/lib's heap bound
-# must report the high-water growing, natively and in wasm, and nothing
-# else.
+# 1. Leak: library mode leaks a task node per call. Natively probe/lib's
+# heap bound must report the high-water growing. In wasm the default
+# corpus (patch 0002) may fill first: either the growth message or the
+# runtime's out-of-memory error (ERR_HEAP) is detection. With ERR_HEAP the
+# wasm drivers (the run and the misuse run) exit 1 with that error, so
+# their output differs from native's; nothing else may fail.
 if expect_fail leak env BEND_PATCH_EXTRA=$here/leak.patch sh probe/lib/run.sh
 then
-  grown=$(grep -Ec '^FAILED: (native|wasm): the heap high-water grew' \
-    "$out/leak.log")
-  others=$(grep '^FAILED: ' "$out/leak.log" | grep -vc 'heap high-water grew')
-  if [ "$grown" = 2 ] && [ "$others" = 0 ]; then
+  log=$out/leak.log
+  native=$(grep -c '^FAILED: native: the heap high-water grew' "$log")
+  grown=$(grep -c '^FAILED: wasm: the heap high-water grew' "$log")
+  oom=$(grep -c '^bend: out of memory: ' "$log")
+  exited=$(grep -c '^FAILED: wasm driver exited 1$' "$log")
+  others=$(grep '^FAILED: ' "$log" | grep -v \
+    -e '^FAILED: native: the heap high-water grew' \
+    -e '^FAILED: wasm: the heap high-water grew' \
+    -e '^FAILED: wasm driver exited 1$' \
+    -e '^FAILED: native and wasm differ ' \
+    -e '/node: a disposed handle gave exit 1: bend: out of memory: ' \
+    | grep -c .)
+  if [ "$native" = 1 ] && [ "$grown" = 1 ] && [ "$oom" = 0 ] \
+    && [ "$exited" = 0 ] && [ "$others" = 0 ]; then
     ok "leak: probe/lib/run.sh fails on the heap bound, native and wasm"
+  elif [ "$native" = 1 ] && [ "$grown" = 0 ] && [ "$oom" -ge 1 ] \
+    && [ "$exited" = 1 ] && [ "$others" = 0 ]; then
+    ok "leak: probe/lib/run.sh fails on the heap bound (native) and" \
+      "out of memory (wasm)"
   else
-    bad "leak: probe/lib/run.sh failed for another reason (log $out/leak.log)"
+    bad "leak: probe/lib/run.sh failed for another reason (log $log)"
   fi
 fi
 
