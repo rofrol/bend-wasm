@@ -9,6 +9,11 @@ Plan and context: `docs/plan.md`.
   TypeScript package, a new pinned build dependency fetched by the
   coordinator; catches type errors our `comp.ts` patches introduce.
   Decided by the user 2026-10-16 (d-qiadn2fv): yes.
+  Fetched by the coordinator 2026-10-16: `~/.cache/bend-wasm/typecheck-ts6.0.3/`
+  (npm, `--ignore-scripts`): typescript 6.0.3 (JS; 7.x is the native Go
+  port with per-platform binaries), bun-types 1.4.2, @types/node 26.6.5,
+  undici-types 8.9.0; package-lock.json sha256 0221bcef1fb8...af86.
+  Worker run r-tqd3miak.
 
 - [ ] Check whether Bend's TypeScript compiler (bundled into one JS file) [t-xz35srdq]
   runs on QuickJS, a small C JavaScript engine Debian and Guix build from
@@ -16,6 +21,10 @@ Plan and context: `docs/plan.md`.
   `20261016-194939-a5a8`). Needs QuickJS fetched and pinned by the
   coordinator; one worker item; result: works, or the missing features.
   Decided by the user 2026-10-16 (d-2r2p2k3m): approved.
+  Fetched by the coordinator 2026-10-16: Bellard's QuickJS 2026-06-04
+  (latest release; Debian has 2025.04.26), `quickjs-2026-06-04.tar.xz`
+  sha256 b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a,
+  unpacked at `~/.cache/bend-wasm/quickjs-2026-06-04/`.
 
 - [ ] Plain-clang freestanding build replacing emcc (from the Zig and [t-fwjpak4c]
   clang questions; consult rounds `20261016-175818-a3e6` and
