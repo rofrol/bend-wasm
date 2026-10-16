@@ -4,9 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Browser check: the pure probe program runs in a page without [t-2zouc2um]
-  cross-origin isolation (single worker, no pthreads) with output identical
-  to native; record the browsers tried (tail calls are an engine feature).
 - [ ] Persistent-state spike, patch 0003 (library mode, separate from the [t-esggsei6]
   portability patches): the emitter emits, for named definitions, exported
   C entry points with no `main()`; JS holds opaque handles (root table slot

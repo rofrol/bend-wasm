@@ -167,3 +167,12 @@ through the caller's frame, which the tail call frees, so `e.alc` read 0
 checked by the coordinator). Patch 0002 passes the two words instead under
 Emscripten; native C is unchanged. The finding goes into the upstream
 offer (t-yuiyk4uz).
+
+## Browser check (t-2zouc2um)
+
+Done 2026-10-16 (run r-4xcmyvtb): `probe/web/` builds `hello` and `arith`
+for a plain page (wasm embedded, `file://`, no pthreads, no COOP/COEP).
+Headless Chrome 155.0.8059.80: both match native, exit 0,
+`crossOriginIsolated` false. Run by the coordinator outside the worker
+sandbox (herdr job 20261016-144341-f941), since Chrome cannot start inside
+it. Safari and Firefox not tried.
