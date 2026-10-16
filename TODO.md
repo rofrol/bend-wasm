@@ -38,6 +38,20 @@ Plan and context: `docs/plan.md`.
   formatting; `musttail` gives `return_call`. `-D__EMSCRIPTEN__` is still
   needed (the series' wasm path keys on it); step (B) replaces it with its
   own guard. Next: step (B).
+  Step (B) done 2026-10-16 (run r-mhf6rghq, d365497): patch 0004 under
+  `BEND_WASM_FREESTANDING` (defines `__EMSCRIPTEN__` to reuse 0002's wasm
+  path; `#error` under emcc): own string functions, a top-of-heap
+  allocator (realloc grows the top block in place), a minimal printf,
+  host imports in module `bend` (`write`, `exit`, `now`; trapping
+  stand-ins for `fmt_fp`, `strtof`, `strtod`, 15 math functions and
+  `fmodf`, for step C); `tools/clang-wasm/build.sh` (clang + wasm-ld
+  `--no-entry`, no memory growth, sized as `scripts/wasm-flags`, plus
+  `wasm-opt --memory-packing`) and `check.sh` (52 modules build and
+  validate). Emcc output unchanged. Sizes: 45% of emcc's in all (41%
+  gzip), Robokill 67% (62% gzip). A one-off run by the worker matched emcc
+  on 49 of 51 programs; the other two trap in `fmt_fp` (step C). Note: until
+  step C, every program traps on `--gpu 4GB` (option parsing calls
+  `strtod`). Next: step (C).
 - [ ] Offer the patch series upstream on [t-yuiyk4uz]
   https://github.com/bendlang/bend/issues/1598 (the user approves the text
   first).
