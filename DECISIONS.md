@@ -496,3 +496,155 @@ from upstream main 234cb9b9), with the policy the user chose,
 `BOOTSTRAP.md` (goal and context); commit 2ac9f72c, not pushed. Herdr
 workspace `bend-bootstrap` (wD8), agent `bend-bootstrap` started with a
 first prompt; bend-wasm does not coordinate it.
+
+## Memory in Chrome and the frozen emcc baseline (t-2lsz77ug)
+
+Done 2026-10-16: code in run r-2mymemna; the Chrome run by the coordinator
+(user's d-2v35sch7, herdr job 20261016-201946-7171, `sh
+bench/robokill/run.sh` at ab6139d; a first try failed with exit 126 because
+`run.sh` is not executable). Chrome 155, M1 Pro, 5 blocks, 10,000 frames.
+Step+upload ms, median over blocks: n = 500 JS p95 0.275, wasm 0.130;
+n = 2,000 JS p50 0.960 p95 1.060, wasm p50 0.350 p95 0.370 (paired p95
+ratio 0.500 and 0.349). Memory at n = 2,000 after the replay, MiB: linear
+11.0 (wasm); tab (`measureUserAgentSpecificMemory`) JS 12.1, wasm 22.5
+(was about 536 before the memory work); renderer RSS JS 208.6, wasm 150.1;
+renderer footprint JS 110.1, wasm 45.2. Wasm load 17-67 ms in all
+(`bend_init` 0.1-4.8 ms). Shipped bytes raw / gzip -9: JS lane 40,357 /
+6,617; wasm lane 52,992 / 22,087 (`step.lib.wasm` 34,619 / 15,487).
+Frozen emcc baseline for the clang cutover criteria (from
+`bench/robokill/out/baseline.json`, which `run.sh` overwrites):
+
+```json
+{
+ "shipped": {
+  "js": {
+   "files": {
+    "step.mjs": {
+     "raw": 40357,
+     "gzip9": 6617
+    }
+   },
+   "total": {
+    "raw": 40357,
+    "gzip9": 6617
+   }
+  },
+  "wasm": {
+   "files": {
+    "step.wasm.mjs": {
+     "raw": 1928,
+     "gzip9": 648
+    },
+    "bend-glue.mjs": {
+     "raw": 7087,
+     "gzip9": 2729
+    },
+    "step.lib.mjs": {
+     "raw": 9358,
+     "gzip9": 3223
+    },
+    "step.lib.wasm": {
+     "raw": 34619,
+     "gzip9": 15487
+    }
+   },
+   "total": {
+    "raw": 52992,
+    "gzip9": 22087
+   }
+  }
+ },
+ "linearMemoryBytes": 11534336,
+ "memory": {
+  "js": {
+   "500": {
+    "init": {
+     "wasmMemoryBytes": null,
+     "uaMemoryBytes": 801571,
+     "rendererRssBytes": 197820416,
+     "rendererFootprintBytes": 64488888
+    },
+    "replay": {
+     "wasmMemoryBytes": null,
+     "uaMemoryBytes": 12479063,
+     "rendererRssBytes": 205881344,
+     "rendererFootprintBytes": 105645568
+    }
+   },
+   "2000": {
+    "init": {
+     "wasmMemoryBytes": null,
+     "uaMemoryBytes": 12370208,
+     "rendererRssBytes": 207683584,
+     "rendererFootprintBytes": 106268160
+    },
+    "replay": {
+     "wasmMemoryBytes": null,
+     "uaMemoryBytes": 12669996,
+     "rendererRssBytes": 218775552,
+     "rendererFootprintBytes": 115492376
+    }
+   }
+  },
+  "wasm": {
+   "500": {
+    "init": {
+     "wasmMemoryBytes": 11534336,
+     "uaMemoryBytes": 12212393,
+     "rendererRssBytes": 195362816,
+     "rendererFootprintBytes": 63489464
+    },
+    "replay": {
+     "wasmMemoryBytes": 11534336,
+     "uaMemoryBytes": 23573878,
+     "rendererRssBytes": 156598272,
+     "rendererFootprintBytes": 46073272
+    }
+   },
+   "2000": {
+    "init": {
+     "wasmMemoryBytes": 11534336,
+     "uaMemoryBytes": 23408430,
+     "rendererRssBytes": 157024256,
+     "rendererFootprintBytes": 46220728
+    },
+    "replay": {
+     "wasmMemoryBytes": 11534336,
+     "uaMemoryBytes": 23589418,
+     "rendererRssBytes": 157401088,
+     "rendererFootprintBytes": 47416832
+    }
+   }
+  }
+ },
+ "chromeStepUploadMs": {
+  "js": {
+   "500": {
+    "p50": 0.23,
+    "p95": 0.275
+   },
+   "2000": {
+    "p50": 0.96,
+    "p95": 1.06
+   }
+  },
+  "wasm": {
+   "500": {
+    "p50": 0.12,
+    "p95": 0.13
+   },
+   "2000": {
+    "p50": 0.35,
+    "p95": 0.37
+   }
+  }
+ },
+ "blocks": 5,
+ "frames": 10000,
+ "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+ "adapter": {
+  "vendor": "apple",
+  "architecture": "metal-3"
+ }
+}
+```

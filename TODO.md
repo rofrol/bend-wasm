@@ -4,17 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Memory measurement in the benchmark: report [t-2lsz77ug]
-  `WebAssembly.Memory.buffer.byteLength`, `measureUserAgentSpecificMemory`
-  and the renderer process's resident footprint from the OS (macOS), each
-  after init and after the replay, at events the page posts; compare the
-  JS lane; rerun the Chrome benchmark after the memory patch.
-  This run freezes the emcc baseline for the clang cutover criteria
-  (shipped wasm and JS sizes raw and gzip, linear memory, Chrome p95).
-  Code landed 2026-10-16 (run r-2mymemna): memory marks after init and
-  after the replay (linear memory, measureUserAgentSpecificMemory, renderer
-  RSS and footprint), summary medians and out/baseline.json; check.sh
-  passed outside the sandbox (coordinator). Open: the Chrome run itself.
 - [ ] Browser-only shipped glue (from the Node question): build the shipped [t-3wp2nvda]
   module with `-sENVIRONMENT=web` (and `-sFILESYSTEM=0` if nothing uses a
   file system), audit `step.wasm.mjs` and the Emscripten glue for
