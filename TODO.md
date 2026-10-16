@@ -52,6 +52,18 @@ Plan and context: `docs/plan.md`.
   on 49 of 51 programs; the other two trap in `fmt_fp` (step C). Note: until
   step C, every program traps on `--gpu 4GB` (option parsing calls
   `strtod`). Next: step (C).
+  Step (C) approved 2026-10-16 (run r-mrmrsddj, worker commit cff5605):
+  musl 1.2.6 (Emscripten's) math, strtof/strtod and fmt_fp vendored
+  unmodified in `tools/clang-wasm/musl/`, plus 32 compiler-rt builtins
+  (binary128 soft-float that musl's strtod needs on wasm32; the same files
+  emcc links: decided by the coordinator as within step C's "vendored
+  sources"); built into `libc.a` with emcc's libc flags plus
+  `-ffp-contract=off -fno-fast-math` and `-std=c11` (c99 clashes with the
+  sysroot's `struct _IO_FILE`). Host imports are only `write`, `exit`,
+  `now`. `math-check.sh`: 571,452 calls bit identical to emcc; mutants
+  caught. All 51 programs match emcc with and without `--gpu 4GB`. Sizes
+  grew: 86% of emcc in all (80% gzip), Robokill 82% (78% gzip), wasm only;
+  the 20% cutover margin includes the JS, judged at step D. Next: step (D).
 - [ ] Offer the patch series upstream on [t-yuiyk4uz]
   https://github.com/bendlang/bend/issues/1598 (the user approves the text
   first).
@@ -201,3 +213,12 @@ Plan and context: `docs/plan.md`.
 ## Needs a decision
 
 ## Proposed
+
+- [ ] Shrink the plain-clang wasm (from t-fwjpak4c step C, run [t-32btjh3h]
+  r-mrmrsddj): every module now carries musl's `strtod` with binary128
+  soft-float (18,596 bytes of code) because the runtime parses `--gpu`
+  with it, and `fmt_fp` (5,237 bytes) for the error path. Options the
+  worker named: parse `--gpu` without `strtod` (a patch change), or a
+  `floatscan` in `double` (a musl edit needing its own bit-exactness
+  proof). Matters only if step D's size criterion (shipped wasm plus JS at
+  least 20% smaller gzip) is tight.
