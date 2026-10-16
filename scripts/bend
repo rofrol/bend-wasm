@@ -1,0 +1,35 @@
+#!/bin/sh
+# Runs the Bend 2 compiler pinned by the vendor/bend submodule (a release
+# tag of https://github.com/bendlang/bend), never the global `bend`. The
+# wasm build depends on the C the pinned compiler emits, so the pin decides
+# how every program behaves (docs/plan.md, "Goal").
+#
+# The compiler is a Bun program; the Bun version is pinned here too, and
+# the Emscripten version is printed for the record by
+# `scripts/bend --toolchain`.
+set -eu
+root=$(cd "$(dirname "$0")/.." && pwd)
+src=$root/vendor/bend
+want_bun=1.4.2
+if [ ! -f "$src/bend2/main.ts" ]; then
+  echo "scripts/bend: vendor/bend is not checked out; run:" >&2
+  echo "  git submodule update --init --depth 1 vendor/bend" >&2
+  exit 1
+fi
+bun=${BEND_BUN:-$(command -v bun || true)}
+if [ -z "$bun" ]; then
+  echo "scripts/bend: bun not found (need $want_bun; set BEND_BUN)" >&2
+  exit 1
+fi
+have_bun=$("$bun" --version)
+if [ "$have_bun" != "$want_bun" ]; then
+  echo "scripts/bend: bun $have_bun, pinned $want_bun (set BEND_BUN)" >&2
+  exit 1
+fi
+if [ "${1:-}" = "--toolchain" ]; then
+  echo "bend $(git -C "$src" describe --tags --always) $(git -C "$src" rev-parse HEAD)"
+  echo "bun $have_bun"
+  "$root/scripts/emcc" --version | head -n 1
+  exit 0
+fi
+BEND_NO_TELEMETRY=1 exec "$bun" "$src/bend2/main.ts" "$@"

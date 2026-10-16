@@ -1,0 +1,34 @@
+#!/bin/sh
+# Runs emcc from the pinned Emscripten SDK, never a system-wide one. The
+# SDK lives outside the repository (docs/workflow.md): herdr workers have
+# no network and cannot write outside their folder, so it is installed
+# once per machine and only read from here. BEND_WASM_EMSDK points to
+# another install of the same pin.
+set -eu
+root=$(cd "$(dirname "$0")/.." && pwd)
+want=6.0.10
+sdk=${BEND_WASM_EMSDK:-$HOME/.cache/bend-wasm/emsdk-$want}
+install="git clone --depth 1 --branch $want https://github.com/emscripten-core/emsdk $sdk && $sdk/emsdk install $want && $sdk/emsdk activate $want"
+if [ ! -f "$sdk/emsdk_env.sh" ]; then
+  echo "scripts/emcc: no emsdk in $sdk (pinned $want); install it with:" >&2
+  echo "  $install" >&2
+  exit 1
+fi
+# emsdk_env.sh finds its directory only when sourced from it.
+here=$(pwd)
+cd "$sdk"
+. ./emsdk_env.sh >/dev/null 2>&1
+cd "$here"
+# Builds keep their cache in the repository, never in the shared SDK.
+EM_CACHE=$root/.cache/emscripten
+export EM_CACHE
+have=$(emcc --version 2>/dev/null | head -n 1 || true)
+case "$have" in
+  *" $want "*) ;;
+  *)
+    echo "scripts/emcc: emcc in $sdk reports '${have:-nothing}', pinned $want; install it with:" >&2
+    echo "  $install" >&2
+    exit 1
+    ;;
+esac
+exec emcc "$@"

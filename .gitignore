@@ -1,0 +1,4 @@
+# Emscripten cache of scripts/emcc (EM_CACHE)
+.cache/
+# Locks herdr's TODO editor leaves beside TODO.md
+*.md.lock

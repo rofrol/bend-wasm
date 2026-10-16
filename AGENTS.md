@@ -1,5 +1,7 @@
 <!-- AGENTS.md version: 1.4.1 -->
 
+Project workflow for this repository (the pinned Bend, Bun and Emscripten toolchain): `docs/workflow.md`. The plan: `docs/plan.md`.
+
 # Architecture and Maintenance Policy
 
 ## Purpose
