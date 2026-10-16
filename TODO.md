@@ -4,12 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Build reproducibility (from the compiler question): `scripts/bend` [t-3rs6ne3b]
-  checks Bun's exact build (`bun --revision`, not only the version) and
-  `--toolchain` prints it; a check emits the C of a few programs twice
-  from clean caches (and with the patch series) and requires byte-identical
-  output, so ordering or environment inputs in the emitter would show.
-
 - [ ] Type-check the patched compiler (`tsc --noEmit` over the patched [t-dyxn2pn3]
   `bend2/*.ts`; Bun strips types without checking them, mimo): needs the
   TypeScript package, a new pinned build dependency fetched by the

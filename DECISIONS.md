@@ -663,3 +663,14 @@ negative); the coordinator ran `bench/robokill/check.sh` (all ok) outside
 the sandbox. `probe/web/run.sh` (unchanged by this run) failed at Chrome's
 teardown; queued as t-xqgdbzz2. Open point from the worker: the Node
 benchmark's out-of-memory at n = 2,000 (Proposed).
+
+## Reproducible emitted C and Bun's revision pinned (t-3rs6ne3b)
+
+Done 2026-10-16 (run r-5uysjpvz, bc293ec): `scripts/bend` pins Bun's
+`bun --revision` (`1.4.2+50a8a8387`) and refuses another build;
+`--toolchain` prints it. `tests/repro/run.sh` emits the C of 7 corpus
+programs and Robokill's step library twice, each pass from a fresh
+compiler copy with an empty Bun transpiler cache, the second in another
+TZ, locale, cwd and TMPDIR, and requires identical bytes: it passes, and
+fails on an injected timestamp (worker's check, not committed). The check
+is not registered in `.herdr/checks.toml`.
