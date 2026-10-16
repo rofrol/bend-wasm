@@ -4,11 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Probe: compile a hello world and a pure arithmetic program through [t-jk5jg2zk]
-  `bend -o x.c` and `emcc` with build flags only; record every error in
-  `docs/probe.md` and classify each blocker as shim-able, emitter change or
-  architectural, with the `comp.ts` lines involved.
-
 - [ ] Open the upstream issue at https://github.com/bendlang/bend with the [t-ymygf5au]
   outline in `docs/plan.md`, once the probe has its first errors?
   Decided by the user 2026-10-16 (d-kznksmaz): yes, after the probe; the
