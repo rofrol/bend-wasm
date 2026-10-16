@@ -63,3 +63,10 @@ Plan and context: `docs/plan.md`.
 ## Needs a decision
 
 ## Proposed
+
+- [ ] Report upstream (bendlang/bend) that `tests/io/process_run.bend` [t-gdvytox3]
+  differs on the JS lane under Bun 1.4.2 at v2.0.35: `inherited pipe` and
+  `descendant output` print `unexpected failure` where native and the
+  expected `#|` lines say `True` (found by t-ucc65gif's worker, reproduced
+  by the coordinator outside the sandbox 2026-10-16). Related: #1051 (closed,
+  fixed for C by PR #1054) and #1468 (open, Process.run on the Node host).
