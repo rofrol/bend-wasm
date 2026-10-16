@@ -1,0 +1,624 @@
+A freestanding wasm32 build of the C runtime template (bend2/comp.ts),
+for plain clang --target=wasm32 -nostdlib with wasm-ld and no emcc
+(bend-wasm's tools/clang-wasm/build.sh, TODO t-fwjpak4c step B). All of it
+is under one guard, BEND_WASM_FREESTANDING; without it the C is the same
+as before, so native and emcc builds do not change.
+
+- The guard defines __EMSCRIPTEN__ before the includes, so the build takes
+  patch 0002's wasm path as it is (two-word Env through musttail, WL_ROOM,
+  static corpus and Term stack, one worker, refused effects); it is an
+  error under emcc, whose target predefines it.
+- No libc is linked: the sysroot's headers declare, and a Freestanding
+  section after the includes defines what the runtime calls (bend-wasm's
+  docs/clang-wasm.md lists it): mem* as memory.copy/memory.fill (bulk
+  memory required), the string functions, strtol and atoi; malloc,
+  calloc, realloc and free over __heap_base and memory.grow, for the host
+  side only (a failure stays "bend: host allocation failed"); unbuffered
+  stdout and stderr and a printf of the runtime's formats; no-op locks of
+  the one worker, and traps where only a second thread or a parked request
+  could lead (pthread_cond_wait, the wake pipe's read, select).
+- The host's part is named imports of one module, "bend": write(fd, data,
+  len), exit(code) and now() (monotonic ns). The F32 text's formatter
+  (fmt_fp, for %e and %f), strtof, strtod and the math functions the
+  emitter can call (exp log log2 log10 sin cos tan asin acos atan sinh
+  cosh tanh atan2 pow fmodf) are imports too, which the host makes trap
+  until they come from vendored musl (step C).
+
+Retired by: an upstream freestanding wasm target of Bend's C runtime
+(https://github.com/bendlang/bend/issues/1598).
+
+diff --git a/bend2/comp.ts b/bend2/comp.ts
+index d669425..cea7a48 100644
+--- a/bend2/comp.ts
++++ b/bend2/comp.ts
+@@ -3639,4 +3639,13 @@ const runtime_c = (tabs: string, spins: string, segs: string,
+ using namespace metal;
+ #elif !defined(BEND_RTC)
++#ifdef BEND_WASM_FREESTANDING
++// A plain clang --target=wasm32 build takes the series' wasm path, which
++// keys on __EMSCRIPTEN__ (emcc's target predefines it), and brings its
++// own libc (Freestanding, below).
++#ifdef __EMSCRIPTEN__
++#error "BEND_WASM_FREESTANDING is for clang --target=wasm32, not emcc"
++#endif
++#define __EMSCRIPTEN__ 1
++#endif
+ #ifdef __APPLE__
+ #define _DARWIN_UNLIMITED_SELECT
+@@ -3673,4 +3682,576 @@ using namespace metal;
+ #endif
+
++#ifdef BEND_WASM_FREESTANDING
++
++// Freestanding
++// ============
++
++// clang --target=wasm32 -nostdlib links no libc: the sysroot's headers
++// declare, and this defines what the runtime calls. The host gives the
++// imports of module "bend":
++//   write(fd: i32, data: i32, len: i32) -> i32  bytes of fd 1 or 2; how
++//     many it took (it may take part), or < 0 for an error
++//   exit(code: i32)    ends the run (_exit, exit); never returns
++//   now() -> i64       monotonic nanoseconds (CLOCK_MONOTONIC: IO.now)
++// and, until they come from vendored musl, ones that trap if called:
++// fmt_fp (printf's %e and %f), strtof, strtod and the math functions
++// (BEND_MATH). stdout and stderr are unbuffered: each write goes out at
++// once, so fflush has nothing to do. malloc serves only the host side
++// (IO buffers, the glue's scratch words): blocks from __heap_base up,
++// reused through free lists, and memory.grow when memory runs out, which
++// fails where the module's maximum is its size; NULL then becomes "bend:
++// host allocation failed" (io_mem). One
++// worker and no blocking effect (the wasm path): the pool's locks are
++// no-ops, and a wait, the IO loop's wake pipe reads and select, which only
++// a second thread or a parked request reach, trap.
++
++#ifndef __wasm_bulk_memory__
++#error "BEND_WASM_FREESTANDING needs bulk memory (memory.copy, memory.fill)"
++#endif
++
++#include <errno.h>
++#include <limits.h>
++#include <stdarg.h>
++
++#define BEND_HOST(N) __attribute__((import_module("bend"), import_name(#N)))
++
++BEND_HOST(write) int bend_host_write(int fd, const void* data, size_t len);
++BEND_HOST(exit) __attribute__((noreturn)) void bend_host_exit(int code);
++BEND_HOST(now) long long bend_host_now(void);
++BEND_HOST(fmt_fp) int bend_host_fmt_fp(char* out, int cap, double v,
++  int prec, int conv);
++BEND_HOST(strtof) float bend_host_strtof(const char* s, char** end);
++BEND_HOST(strtod) double bend_host_strtod(const char* s, char** end);
++
++#define BEND_MATH1(N) BEND_HOST(N) double bend_host_##N(double x); \
++  double N(double x) { return bend_host_##N(x); }
++#define BEND_MATH2(T, N) BEND_HOST(N) T bend_host_##N(T x, T y); \
++  T N(T x, T y) { return bend_host_##N(x, y); }
++BEND_MATH1(exp) BEND_MATH1(log) BEND_MATH1(log2) BEND_MATH1(log10)
++BEND_MATH1(sin) BEND_MATH1(cos) BEND_MATH1(tan) BEND_MATH1(asin)
++BEND_MATH1(acos) BEND_MATH1(atan) BEND_MATH1(sinh) BEND_MATH1(cosh)
++BEND_MATH1(tanh) BEND_MATH2(double, atan2) BEND_MATH2(double, pow)
++BEND_MATH2(float, fmodf)
++
++float strtof(const char* restrict s, char** restrict end) {
++  return bend_host_strtof(s, end);
++}
++
++double strtod(const char* restrict s, char** restrict end) {
++  return bend_host_strtod(s, end);
++}
++
++_Noreturn void _exit(int code) {
++  bend_host_exit(code);
++}
++
++_Noreturn void exit(int code) {
++  bend_host_exit(code);
++}
++
++static int bend_errno;
++
++int* __errno_location(void) {
++  return &bend_errno;
++}
++
++int clock_gettime(clockid_t clk, struct timespec* ts) {
++  if (clk != CLOCK_MONOTONIC) {
++    bend_errno = EINVAL;
++    return -1;
++  }
++  unsigned long long t = (unsigned long long)bend_host_now();
++  ts->tv_sec  = (time_t)(t / 1000000000u);
++  ts->tv_nsec = (long)(t % 1000000000u);
++  return 0;
++}
++
++// Memory and strings: mem* lower to memory.copy and memory.fill.
++
++void* memcpy(void* restrict d, const void* restrict s, size_t n) {
++  return __builtin_memcpy(d, s, n);
++}
++
++void* memmove(void* d, const void* s, size_t n) {
++  return __builtin_memmove(d, s, n);
++}
++
++void* memset(void* d, int c, size_t n) {
++  return __builtin_memset(d, c, n);
++}
++
++int memcmp(const void* a, const void* b, size_t n) {
++  const unsigned char* p = a;
++  const unsigned char* q = b;
++  for (; n > 0 && *p == *q; n -= 1, p += 1, q += 1) {
++  }
++  return n > 0 ? *p - *q : 0;
++}
++
++void* memchr(const void* s, int c, size_t n) {
++  for (const unsigned char* p = s; n > 0; n -= 1, p += 1) {
++    if (*p == (unsigned char)c) {
++      return (void*)p;
++    }
++  }
++  return NULL;
++}
++
++size_t strlen(const char* s) {
++  const char* p = s;
++  while (*p != 0) {
++    p += 1;
++  }
++  return (size_t)(p - s);
++}
++
++int strcmp(const char* a, const char* b) {
++  for (; *a != 0 && *a == *b; a += 1, b += 1) {
++  }
++  return (unsigned char)*a - (unsigned char)*b;
++}
++
++char* strchr(const char* s, int c) {
++  for (;; s += 1) {
++    if (*s == (char)c) {
++      return (char*)s;
++    }
++    if (*s == 0) {
++      return NULL;
++    }
++  }
++}
++
++char* strpbrk(const char* s, const char* set) {
++  for (; *s != 0; s += 1) {
++    if (strchr(set, *s) != NULL) {
++      return (char*)s;
++    }
++  }
++  return NULL;
++}
++
++long strtol(const char* restrict s, char** restrict end, int base) {
++  const char* p = s;
++  while (*p == ' ' || (*p >= '\t' && *p <= '\r')) {
++    p += 1;
++  }
++  int neg = *p == '-';
++  p += *p == '-' || *p == '+';
++  if ((base == 0 || base == 16) && p[0] == '0' && (p[1] | 32) == 'x') {
++    p   += 2;
++    base = 16;
++  } else if (base == 0) {
++    base = *p == '0' ? 8 : 10;
++  }
++  unsigned long lim = neg ? -(unsigned long)LONG_MIN : LONG_MAX;
++  unsigned long v   = 0;
++  const char*   d0  = p;
++  bool          big = false;
++  for (;; p += 1) {
++    int c = *p >= '0' && *p <= '9' ? *p - '0'
++      : (*p | 32) >= 'a' && (*p | 32) <= 'z' ? (*p | 32) - 'a' + 10 : 99;
++    if (c >= base) {
++      break;
++    }
++    big |= v > (lim - (unsigned long)c) / (unsigned long)base;
++    v    = big ? lim : v * (unsigned long)base + (unsigned long)c;
++  }
++  if (end != NULL) {
++    *end = (char*)(p == d0 ? s : p);
++  }
++  if (big) {
++    bend_errno = ERANGE;
++  }
++  return neg ? (long)(0 - v) : (long)v;
++}
++
++int atoi(const char* s) {
++  return (int)strtol(s, NULL, 10);
++}
++
++// The allocator. A block is a 16-byte header (the caller's capacity, a
++// multiple of 16, and the next free block of its class) and then the
++// caller's bytes, taken from the top of the heap. malloc rounds up to a
++// power of two; class c holds the free blocks of capacity 16 << c up to
++// twice that. The block at the top grows in place (realloc) and goes
++// back to the top when freed, so IO.print's doubling buffer takes about
++// its final size, not the sum of its steps.
++
++typedef struct BendBlock {
++  size_t            cap;
++  struct BendBlock* next;
++} BendBlock;
++
++#define BEND_HDR 16
++#define BEND_MAX ((size_t)1 << 31)
++
++extern unsigned char __heap_base;
++static uint64_t   bend_brk;
++static uint64_t   bend_end;
++static BendBlock* bend_free_at[32];
++
++static BendBlock* bend_block(void* p) {
++  return (BendBlock*)((char*)p - BEND_HDR);
++}
++
++static unsigned bend_cls(size_t cap) {
++  return 31 - (unsigned)__builtin_clz((unsigned)(cap / 16));
++}
++
++// Makes n more bytes free at the top, growing memory if it can.
++static bool bend_room(uint64_t n) {
++  if (bend_brk == 0) {
++    bend_brk = ((uintptr_t)&__heap_base + 15) & ~(uintptr_t)15;
++    bend_end = (uint64_t)__builtin_wasm_memory_size(0) * 65536;
++  }
++  if (bend_end - bend_brk < n) {
++    uint64_t pages = (n - (bend_end - bend_brk) + 65535) / 65536;
++    if (__builtin_wasm_memory_grow(0, (size_t)pages) == (size_t)-1) {
++      return false;
++    }
++    bend_end += pages * 65536;
++  }
++  return true;
++}
++
++void* malloc(size_t n) {
++  if (n > BEND_MAX) {
++    return NULL;
++  }
++  size_t cap = 16;
++  while (cap < n) {
++    cap *= 2;
++  }
++  BendBlock** at = &bend_free_at[bend_cls(cap)];
++  BendBlock*  b  = *at;
++  if (b != NULL) {
++    *at = b->next;
++    return (char*)b + BEND_HDR;
++  }
++  if (!bend_room(BEND_HDR + cap)) {
++    return NULL;
++  }
++  b         = (BendBlock*)(uintptr_t)bend_brk;
++  bend_brk += BEND_HDR + cap;
++  b->cap    = cap;
++  return (char*)b + BEND_HDR;
++}
++
++void free(void* p) {
++  if (p == NULL) {
++    return;
++  }
++  BendBlock* b = bend_block(p);
++  if ((uintptr_t)p + b->cap == bend_brk) {
++    bend_brk = (uintptr_t)b;
++    return;
++  }
++  b->next = bend_free_at[bend_cls(b->cap)];
++  bend_free_at[bend_cls(b->cap)] = b;
++}
++
++void* calloc(size_t k, size_t n) {
++  if (n != 0 && k > SIZE_MAX / n) {
++    return NULL;
++  }
++  void* p = malloc(k * n);
++  return p != NULL ? memset(p, 0, k * n) : NULL;
++}
++
++void* realloc(void* p, size_t n) {
++  if (p == NULL) {
++    return malloc(n);
++  }
++  BendBlock* b = bend_block(p);
++  if (n <= b->cap) {
++    return p;
++  }
++  if (n > BEND_MAX) {
++    return NULL;
++  }
++  if ((uintptr_t)p + b->cap == bend_brk) {
++    size_t cap = (n + 15) & ~(size_t)15;
++    if (!bend_room(cap - b->cap)) {
++      return NULL;
++    }
++    bend_brk += cap - b->cap;
++    b->cap    = cap;
++    return p;
++  }
++  void* q = malloc(n);
++  if (q != NULL) {
++    memcpy(q, p, b->cap);
++    free(p);
++  }
++  return q;
++}
++
++// Standard streams and printf: %%, %c, %s, %d, %i, %u, %x, %X with the
++// l, ll and z lengths, a precision only on %s, %e and %f (and .* for it),
++// no flags or widths: what the runtime's formats use. Anything else is
++// a programmer error and traps.
++
++struct _IO_FILE {
++  int fd;
++};
++
++static FILE bend_files[2] = { { 1 }, { 2 } };
++FILE* const stdout = &bend_files[0];
++FILE* const stderr = &bend_files[1];
++
++static int bend_put(FILE* f, const char* s, size_t n) {
++  while (n > 0) {
++    int k = bend_host_write(f->fd, s, n);
++    if (k <= 0 || (size_t)k > n) {
++      return -1;
++    }
++    s += k;
++    n -= (size_t)k;
++  }
++  return 0;
++}
++
++size_t fwrite(const void* restrict p, size_t size, size_t n,
++  FILE* restrict f) {
++  if (size == 0 || n == 0) {
++    return 0;
++  }
++  if (n > SIZE_MAX / size) {
++    return 0;
++  }
++  return bend_put(f, p, size * n) == 0 ? n : 0;
++}
++
++int fputs(const char* restrict s, FILE* restrict f) {
++  return bend_put(f, s, strlen(s)) == 0 ? 0 : EOF;
++}
++
++int putchar(int c) {
++  char b = (char)c;
++  return bend_put(stdout, &b, 1) == 0 ? (unsigned char)c : EOF;
++}
++
++int fflush(FILE* f) {
++  return 0;
++}
++
++// Where formatted text goes: into buf (cap bytes with the NUL), or through
++// buf, flushed to f when full; len counts all of it, err a failed write.
++typedef struct {
++  char*  buf;
++  size_t cap;
++  size_t at;
++  size_t len;
++  FILE*  f;
++  int    err;
++} BendSink;
++
++static void bend_emit(BendSink* k, const char* s, size_t n) {
++  k->len += n;
++  for (; n > 0; n -= 1, s += 1) {
++    if (k->f != NULL && k->at == k->cap) {
++      k->err |= bend_put(k->f, k->buf, k->at);
++      k->at   = 0;
++    }
++    if (k->at + (k->f == NULL) < k->cap) {
++      k->buf[k->at++] = *s;
++    }
++  }
++}
++
++static int bend_fmt(BendSink* k, const char* fmt, va_list ap) {
++  for (const char* p = fmt; *p != 0; p += 1) {
++    if (*p != '%') {
++      bend_emit(k, p, 1);
++      continue;
++    }
++    p += 1;
++    int prec = -1;
++    if (*p == '.') {
++      p += 1;
++      if (*p == '*') {
++        prec  = va_arg(ap, int);
++        p    += 1;
++      } else {
++        for (prec = 0; *p >= '0' && *p <= '9'; p += 1) {
++          prec = prec * 10 + (*p - '0');
++        }
++      }
++    }
++    int lng = 0;
++    for (; *p == 'l' || *p == 'z'; p += 1) {
++      lng += *p == 'l' ? 1 : 2;
++    }
++    char  tmp[512];
++    char* s = tmp + sizeof tmp;
++    switch (*p) {
++      case '%':
++        bend_emit(k, "%", 1);
++        break;
++      case 'c': {
++        char c = (char)va_arg(ap, int);
++        bend_emit(k, &c, 1);
++        break;
++      }
++      case 's': {
++        const char* a = va_arg(ap, const char*);
++        size_t      n = 0;
++        while ((prec < 0 || n < (size_t)prec) && a[n] != 0) {
++          n += 1;
++        }
++        bend_emit(k, a, n);
++        break;
++      }
++      case 'd':
++      case 'i':
++      case 'u':
++      case 'x':
++      case 'X': {
++        bool sgn = *p == 'd' || *p == 'i';
++        unsigned long long v;
++        bool neg = false;
++        if (sgn) {
++          long long a = lng >= 2 ? va_arg(ap, long long)
++            : lng == 1 ? va_arg(ap, long) : va_arg(ap, int);
++          neg = a < 0;
++          v   = neg ? 0 - (unsigned long long)a : (unsigned long long)a;
++        } else {
++          v = lng >= 2 ? va_arg(ap, unsigned long long)
++            : lng == 1 ? va_arg(ap, unsigned long) : va_arg(ap, unsigned);
++        }
++        if (prec >= 0) {
++          __builtin_trap();
++        }
++        unsigned    b  = *p == 'x' || *p == 'X' ? 16 : 10;
++        const char* ds = *p == 'X' ? "0123456789ABCDEF" : "0123456789abcdef";
++        do {
++          *--s = ds[v % b];
++          v   /= b;
++        } while (v != 0);
++        if (neg) {
++          *--s = '-';
++        }
++        bend_emit(k, s, (size_t)(tmp + sizeof tmp - s));
++        break;
++      }
++      case 'e':
++      case 'f': {
++        int n = bend_host_fmt_fp(tmp, sizeof tmp, va_arg(ap, double),
++          prec < 0 ? 6 : prec, *p);
++        if (n < 0 || n >= (int)sizeof tmp) {
++          __builtin_trap();
++        }
++        bend_emit(k, tmp, (size_t)n);
++        break;
++      }
++      default:
++        __builtin_trap();
++    }
++  }
++  if (k->f != NULL) {
++    k->err |= bend_put(k->f, k->buf, k->at);
++  } else if (k->cap > 0) {
++    k->buf[k->at] = 0;
++  }
++  return k->err != 0 ? -1 : (int)k->len;
++}
++
++static int bend_vfprintf(FILE* f, const char* fmt, va_list ap) {
++  char     buf[256];
++  BendSink k = { buf, sizeof buf, 0, 0, f, 0 };
++  return bend_fmt(&k, fmt, ap);
++}
++
++int fprintf(FILE* restrict f, const char* restrict fmt, ...) {
++  va_list ap;
++  va_start(ap, fmt);
++  int n = bend_vfprintf(f, fmt, ap);
++  va_end(ap);
++  return n;
++}
++
++int printf(const char* restrict fmt, ...) {
++  va_list ap;
++  va_start(ap, fmt);
++  int n = bend_vfprintf(stdout, fmt, ap);
++  va_end(ap);
++  return n;
++}
++
++int snprintf(char* restrict out, size_t cap, const char* restrict fmt, ...) {
++  va_list  ap;
++  BendSink k = { out, cap, 0, 0, NULL, 0 };
++  va_start(ap, fmt);
++  int n = bend_fmt(&k, fmt, ap);
++  va_end(ap);
++  return n;
++}
++
++int sprintf(char* restrict out, const char* restrict fmt, ...) {
++  va_list  ap;
++  BendSink k = { out, SIZE_MAX, 0, 0, NULL, 0 };
++  va_start(ap, fmt);
++  int n = bend_fmt(&k, fmt, ap);
++  va_end(ap);
++  return n;
++}
++
++// Threads and the IO loop's host calls: one worker, nothing parks.
++
++int pthread_mutex_lock(pthread_mutex_t* m) {
++  return 0;
++}
++
++int pthread_mutex_unlock(pthread_mutex_t* m) {
++  return 0;
++}
++
++int pthread_cond_signal(pthread_cond_t* c) {
++  return 0;
++}
++
++int pthread_cond_broadcast(pthread_cond_t* c) {
++  return 0;
++}
++
++// No other thread could signal it: a wait would never end.
++int pthread_cond_wait(pthread_cond_t* restrict c,
++  pthread_mutex_t* restrict m) {
++  __builtin_trap();
++}
++
++int sched_yield(void) {
++  return 0;
++}
++
++void (*signal(int sig, void (*f)(int)))(int) {
++  return SIG_DFL;
++}
++
++// The wake pipe carries helper threads' results and select waits on parked
++// requests; the wasm path refuses both (io_work, io_wait_on), so it opens
++// no pipe, and read and select, reached only through them, trap.
++int pipe(int fd[2]) {
++  fd[0] = -1;
++  fd[1] = -1;
++  return 0;
++}
++
++int fcntl(int fd, int cmd, ...) {
++  return 0;
++}
++
++ssize_t read(int fd, void* buf, size_t n) {
++  __builtin_trap();
++}
++
++int select(int n, fd_set* restrict r, fd_set* restrict w, fd_set* restrict x,
++  struct timeval* restrict t) {
++  __builtin_trap();
++}
++
++#endif
++
+ // Dialect
+ // =======

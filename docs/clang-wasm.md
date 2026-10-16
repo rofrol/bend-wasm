@@ -1,9 +1,10 @@
-# Plain-clang wasm build: the libc gap
+# Plain-clang wasm build
 
 TODO t-fwjpak4c, step (A): what does Bend's emitted C need from a libc when
 it is compiled for wasm32 by plain clang, without emcc? This sizes steps
 (B) (mem*, allocator, printing, abort, host imports, `wasm-ld --no-entry`)
-and (C) (math from vendored musl).
+and (C) (math from vendored musl). Step (B), the build itself, is at the
+end ("Step (B): the freestanding build").
 
 `tools/clang-wasm/inventory.sh` answers it; results in
 `tools/clang-wasm/out/` (ignored). It emits the C of the 51 programs of
@@ -210,3 +211,219 @@ investigated; it is not the path a wasm build takes.
   `fmt_fp`), the latter two needed by F32 printing.
 - Robokill's library alone needs only the error path (`snprintf`,
   `fprintf`, `fflush`, `_exit`, `stdout`, `stderr`) and the pool stubs.
+
+## Step (B): the freestanding build
+
+2026-10-16, the toolchain of step (A) and patch
+`patches/0004-freestanding-wasm.patch`.
+
+```
+tools/clang-wasm/build.sh FILE.c OUTDIR NAME   # one module: OUTDIR/NAME.wasm
+tools/clang-wasm/check.sh [OUTDIR]             # the 51 programs and Robokill
+```
+
+`build.sh` compiles with the pinned emsdk's clang, `--target=wasm32
+-nostdlib -mbulk-memory -DBEND_WASM_FREESTANDING`, `scripts/wasm-flags`'
+C flags (`-std=c11 -O2 -mtail-call`) and the sysroot's musl headers for
+declarations, as step (A); links with `wasm-ld --no-entry --export=...`;
+then runs binaryen's `wasm-opt --memory-packing` from the same SDK (below).
+No libc, compiler-rt or crt is linked, and none is needed: the link
+fails on any undefined symbol.
+
+### The guard
+
+One macro, `BEND_WASM_FREESTANDING`. It defines `__EMSCRIPTEN__` before
+the template's includes, so the build takes the series' wasm path exactly
+as emcc's does (two-word `Env` through `musttail`, `WL_ROOM`, the static
+corpus and Term stack, one worker, the refused effects), and it is an
+`#error` under emcc. The series keeps keying on `__EMSCRIPTEN__` rather
+than a new name because renaming patch 0002's conditions would rewrite
+them, and `tests/negative/env-abi.patch` applies to one of those lines.
+Without the guard the C preprocesses to what it was: the emcc builds of
+`check.sh` are byte-identical to the ones built before the patch
+(`glue/out/step.lib.wasm`, `tests/differential/out/run_nat_native.wasm.wasm`,
+`cmp`).
+
+Under the guard a "Freestanding" section after the includes defines what
+step (A) found missing:
+
+- `memcpy`, `memmove`, `memset` as `memory.copy`/`memory.fill` (bulk
+  memory is required, an `#error` otherwise; clang inlines most calls
+  anyway), `memcmp memchr strlen strcmp strchr strpbrk strtol atoi`;
+- `malloc calloc realloc free` (below);
+- `stdout`, `stderr`, `fwrite fputs putchar fflush` and a printf
+  (`printf fprintf snprintf sprintf`) of the formats the template uses:
+  `%% %c %s %d %i %u %x %X`, the lengths `l ll z`, a precision on `%s`
+  (`.N`, `.*`) and on `%e %f`; anything else traps. The streams are
+  unbuffered (each write goes to the host at once), so `fflush` has
+  nothing to do;
+- `_exit`, `exit`, `clock_gettime(CLOCK_MONOTONIC)`, `errno`;
+- the one worker's pool: `pthread_mutex_lock/unlock`,
+  `pthread_cond_signal/broadcast`, `sched_yield` do nothing;
+  `pthread_cond_wait` traps (nothing could signal it);
+- the IO loop: `signal` and `fcntl` do nothing, `pipe` opens nothing (fds
+  -1), and `read` and `select` trap: they serve helper threads and parked
+  requests, which the wasm path refuses (`io_work`, `io_wait_on`), so no
+  program reaches them.
+
+### Host imports
+
+All of module `bend`; a module imports only those its code reaches.
+
+| Import | Signature | For |
+|---|---|---|
+| `write` | `(fd i32, data i32, len i32) -> i32` | stdout (1) and stderr (2): the bytes taken (the runtime loops on fewer), 0 or less for an error ("a short write on a standard stream") |
+| `exit` | `(code i32)`, never returns | `_exit` (every fail-stop), `exit` (`IO.exit`) |
+| `now` | `() -> i64` | monotonic nanoseconds (`io_tick`: `IO.now`, the IO loop) |
+| `fmt_fp` | `(out i32, cap i32, v f64, prec i32, conv i32) -> i32` | `%e`/`%f` of a double (`conv` 101 or 102) into `out`, its length; F32 text. Traps until step (C) |
+| `strtof`, `strtod` | `(s i32, end i32) -> f32 / f64` | F32 text read back; `main`'s `--gpu` size. Trap until step (C) |
+| `exp log log2 log10 sin cos tan asin acos atan sinh cosh tanh` | `(f64) -> f64` | F32 math. Trap until step (C) |
+| `atan2 pow` | `(f64, f64) -> f64` | the same |
+| `fmodf` | `(f32, f32) -> f32` | the same |
+
+What the 52 modules import (`check.sh` instantiates each with stubs):
+
+- 47 programs: `write exit now`, unresolved `strtod fmt_fp`;
+- `run/float_printing`, `run/u32_mod_operator`: `write exit now`,
+  unresolved `strtof strtod fmt_fp`;
+- `reg/wnf_deep_chain`: `write exit`, unresolved `strtof strtod fmt_fp`;
+- `io/halt_utf8_law`: `write exit`, unresolved `strtod fmt_fp`;
+- Robokill's library: `write exit`, unresolved `fmt_fp`.
+
+Every module imports `fmt_fp`, because the one formatter also serves
+`snprintf` on the error path; every program imports `strtod` through
+`main`'s option parsing, and `--gpu 4GB` traps there until step (C) (emcc
+parses it and then ignores it, the program having no `!`). No module
+imports a math function.
+
+### Exports
+
+- A library (the C defines `bend_init`): what `glue/build.sh`'s emcc build
+  exports (`glue/gen.mjs exports`): `bend_init bend_dispose
+  bend_heap_words bend_handles bend_f32 bend_f32_len malloc` and every
+  `bend_def_*`.
+- A program: `__main_argc_argv` (clang's name for `main(int, char**)` on
+  wasm32) and `malloc`, for the host to place `argv`.
+- Both: `memory` and `__wasm_call_ctors`, which the host calls once,
+  first: a program's effects register in constructors (`io_print_use`).
+
+### Memory
+
+Sized as `scripts/wasm-flags` sizes emcc's: the static image, a 64 KiB
+stack placed first (`-z stack-size=65536 --stack-first`: an overflow
+leaves memory and traps) and a 1 MiB heap (`--initial-heap=1048576`), and
+no growth (`--no-growable-memory`: the maximum is the initial size). All
+52 modules have the same number of pages as their emcc build (176 for
+Robokill, 11,534,336 bytes; 171 to 179 for the programs; `wasm-dis`).
+
+The allocator serves only the host side (IO buffers, the glue's scratch
+words): blocks with a 16-byte header from `__heap_base` up, a request
+rounded to a power of two, freed blocks reused through per-size lists,
+and the block at the top grown in place by `realloc` and returned to the
+top by `free`. More memory comes from `memory.grow`, which fails here, so
+`malloc` returns NULL and the run stops with "bend: host allocation
+failed" (`io_mem`), as under emcc. `IO.print`'s buffer doubles from 64
+bytes: as the top block it grows in place, so the longest String's 512
+KiB buffer, and 768 KiB, fit in the 1 MiB heap, and 2 MiB is refused (a
+throwaway test of the allocator).
+
+### Data: wasm-opt --memory-packing
+
+clang -O2 evaluates the effects' constructors at compile time, so a
+program's `io_eff_rows` (65,536 rows of 8 bytes) becomes initialized data,
+nearly all zeros, and wasm-ld writes all 512 KiB of it (533 KiB modules).
+emcc's wasm-opt drops such zero runs; `build.sh` runs that one pass,
+`--memory-packing`, and nothing else of wasm-opt's pipeline (memory is not
+imported, so it is zero at instantiation). It also drops the name
+section, so the tail-call check reads wasm-ld's output (`NAME.ld.wasm`)
+and then checks that the final module has as many `return_call`s.
+
+### Tail calls
+
+`build.sh` disassembles the module with the SDK's `llvm-objdump -d` and
+fails when a segment (`WL_*`) enters a segment by a plain `call` or by any
+`call_indirect`, or when a module whose C has `musttail` has no
+`return_call`. clang refuses a `musttail` it cannot honour, so the check
+is that the target lowered each to `return_call`/`return_call_indirect`.
+`NAME.tail` has the counts. None of the 52 has a plain entry. The counts
+differ from the C's sites, both ways: Robokill's C has 9 `musttail`, the
+module 8 `return_call_indirect`; the ninth, `FID_EXIT`'s jump to a
+continuation that has a frame, is dead code there (`FID_T[*][1]` is 0 for
+every def) and is removed. Across the 52: 1,186 sites, 1,187
+`return_call`s; 37 modules have fewer than their sites (dead sites), some
+more (the optimizer duplicates a tail).
+
+### Results
+
+`check.sh` (about 4 minutes): all 52 emit, build and validate (they
+instantiate with stub imports, every expected export is there), with no
+compiler warning. Running them is step (D)'s loader. A throwaway run in
+the SDK's Node (not committed: real `write`, `exit` and `now`, trapping
+step-(C) imports, `__wasm_call_ctors` then `__main_argc_argv`) gave the
+emcc lane's stdout, stderr and exit status for 49 of the 51 programs; the
+other two, `run/float_printing` and `run/u32_mod_operator`, trap in
+`fmt_fp`. Robokill's library run the same way (n = 500, seed 12345,
+10,000 frames) hashes 603820250, as its RESULTS.md, and a stale handle
+gives the library's message and exit 1.
+
+Sizes in bytes (`check.sh`'s `sizes.txt`; gzip -9): the plain build is 45%
+of emcc's in all (41% gzip-compressed), Robokill 67% (62%). emcc's module
+carries musl's stdio and dlmalloc; emcc also optimizes the code with
+wasm-opt -O2, which the plain build does not, so the code itself differs
+(step (A)'s note on emcc's flags holds too).
+
+| Program | plain | emcc | plain gzip | emcc gzip |
+|---|--:|--:|--:|--:|
+| `run_nat_native` | 19485 | 50641 | 8951 | 23637 |
+| `run_nat_add_infix` | 21299 | 52278 | 9451 | 24143 |
+| `run_nat_overflow` | 19469 | 50578 | 8938 | 23621 |
+| `reg_nat_chain` | 19819 | 50970 | 9152 | 23815 |
+| `reg_nat_table` | 19467 | 50625 | 8939 | 23624 |
+| `run_word_arithmetic` | 19465 | 50623 | 8946 | 23628 |
+| `run_word_div_mod` | 19465 | 50623 | 8942 | 23624 |
+| `run_word_wrap_chains` | 19465 | 50623 | 8946 | 23628 |
+| `run_word_bitwise_literals` | 19465 | 50623 | 8950 | 23632 |
+| `run_u32_mod_operator` | 25148 | 56622 | 10729 | 25608 |
+| `eval_bit_adder` | 19465 | 50623 | 8939 | 23620 |
+| `run_float_arithmetic` | 19465 | 50623 | 8947 | 23628 |
+| `run_float_printing` | 25567 | 57065 | 10760 | 25666 |
+| `run_float_specials` | 19465 | 50623 | 8945 | 23626 |
+| `run_float_text_roundtrip` | 19467 | 50625 | 8950 | 23634 |
+| `run_computed_match` | 19479 | 50635 | 8947 | 23636 |
+| `run_state_machine` | 21728 | 52791 | 9602 | 24231 |
+| `run_expr_interpreter` | 24901 | 55613 | 9809 | 24529 |
+| `run_bst_insert` | 23577 | 54441 | 10293 | 24956 |
+| `run_overuse_clone` | 25277 | 55914 | 10098 | 24753 |
+| `run_spare_reuse` | 21299 | 52278 | 9448 | 24142 |
+| `eval_either_suite` | 25436 | 56039 | 10176 | 24818 |
+| `eval_maybe_ops` | 23237 | 53983 | 9891 | 24524 |
+| `eval_tuple_suite` | 21301 | 52280 | 9452 | 24143 |
+| `reg_match_value_literal_arm` | 21022 | 51934 | 9228 | 23932 |
+| `run_insertion_sort` | 24776 | 55602 | 10317 | 24999 |
+| `run_sieve_eratosthenes` | 20295 | 51449 | 9199 | 23893 |
+| `run_binary_search` | 21179 | 52303 | 9521 | 24229 |
+| `run_fuel_loops` | 19469 | 50627 | 8944 | 23625 |
+| `eval_deep_thunk_chain` | 19539 | 50630 | 8966 | 23666 |
+| `run_list_map_fold_ops` | 103834 | 126364 | 24008 | 37224 |
+| `reg_wnf_deep_chain` | 16922 | 38796 | 8136 | 19107 |
+| `run_flat_copy_share` | 19473 | 50629 | 8948 | 23634 |
+| `run_fork_shared_flat` | 30399 | 60800 | 11724 | 26374 |
+| `run_array_fork_unshare` | 36219 | 66112 | 12621 | 27175 |
+| `run_fn_capture_owns` | 26871 | 57327 | 10385 | 25043 |
+| `reg_share_tuple_global` | 25339 | 56219 | 10632 | 25202 |
+| `reg_brw_shared_fields` | 21844 | 52782 | 9753 | 24393 |
+| `reg_closure_capture_once` | 24924 | 55691 | 10080 | 24738 |
+| `reg_array_keep_cow` | 25691 | 56519 | 10969 | 25505 |
+| `run_string_algorithms` | 41951 | 71205 | 13955 | 28662 |
+| `eval_string_escape` | 25955 | 56472 | 10251 | 24925 |
+| `io_hello_print` | 19829 | 50971 | 9042 | 23720 |
+| `io_do_let_lines` | 21273 | 52257 | 9293 | 24042 |
+| `io_text_formatting` | 26045 | 56416 | 10535 | 25135 |
+| `io_chan_close_send` | 27381 | 57819 | 10905 | 25406 |
+| `io_fiber_single_join` | 31684 | 61505 | 11606 | 26008 |
+| `io_deadlock` | 23580 | 54193 | 9995 | 24513 |
+| `io_halt_utf8_law` | 16172 | 47494 | 7640 | 22377 |
+| `io_nat_host_bounds` | 27525 | 58254 | 10175 | 24867 |
+| `io_nat_host_neg` | 22251 | 53244 | 9589 | 24265 |
+| `robokill_step` | 23238 | 34619 | 9628 | 15510 |
+| `total (52)` | 1276891 | 2845972 | 522246 | 1271035 |
