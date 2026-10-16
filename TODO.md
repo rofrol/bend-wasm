@@ -41,6 +41,13 @@ Plan and context: `docs/plan.md`.
   coordinator; catches type errors our `comp.ts` patches introduce.
   Decided by the user 2026-10-16 (d-qiadn2fv): yes.
 
+- [ ] Check whether Bend's TypeScript compiler (bundled into one JS file) [t-xz35srdq]
+  runs on QuickJS, a small C JavaScript engine Debian and Guix build from
+  source: a bootstrappable path without Bun today (argon, consult round
+  `20261016-194939-a5a8`). Needs QuickJS fetched and pinned by the
+  coordinator; one worker item; result: works, or the missing features.
+  Decided by the user 2026-10-16 (d-2r2p2k3m): approved.
+
 - [ ] Plain-clang freestanding build replacing emcc (from the Zig and [t-fwjpak4c]
   clang questions; consult rounds `20261016-175818-a3e6` and
   `20261016-194631-afbb`), in steps, each its own commit:
@@ -129,14 +136,3 @@ Plan and context: `docs/plan.md`.
 ## Needs a decision
 
 ## Proposed
-- [ ] Check whether Bend's TypeScript compiler (bundled into one JS file) [t-xz35srdq]
-  runs on QuickJS, a small C JavaScript engine Debian and Guix build from
-  source: a bootstrappable path without Bun today (argon, consult round
-  `20261016-194939-a5a8`). Needs QuickJS fetched and pinned by the
-  coordinator; one worker item; result: works, or the missing features.
-- [ ] Propose upstream (https://github.com/bendlang/bend) a bounded [t-xlf2fzal]
-  self-hosting experiment: Bend's lexer and parser and one emitter subset
-  written in Bend, benchmarked against the TypeScript compiler, a list of
-  missing runtime and library features, and a two-generation fixpoint
-  (wonder, same round); the coordinator drafts, the user approves the text
-  before posting.

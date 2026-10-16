@@ -465,3 +465,6 @@ argon; not verified by the coordinator) and not Debian source; it can be
 reproducible if regenerated deterministically. Reproducibility of the
 current build is already an item (TODO, "Build reproducibility"). Two proposals came out of
 the round (TODO, Proposed).
+
+The user 2026-10-16 (d-2r2p2k3m): the QuickJS check is approved (TODO);
+the upstream self-hosting experiment proposal is not approved and dropped.
