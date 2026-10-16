@@ -468,3 +468,13 @@ the round (TODO, Proposed).
 
 The user 2026-10-16 (d-2r2p2k3m): the QuickJS check is approved (TODO);
 the upstream self-hosting experiment proposal is not approved and dropped.
+
+## Memory step 2 follow-up (t-ouy36at5)
+
+Done 2026-10-16 (run r-tegfqq6m): on wasm the negative leak case accepts
+the runtime's out-of-memory error as detection; `probe/lib` uses the
+default corpus again; under `__EMSCRIPTEN__` the out-of-memory message is
+"bend: out of memory: the corpus of N bytes is full; build with a bigger
+-DBEND_CORPUS_BYTES=..." (native and JS text unchanged); stale "528 MB"
+fixed. `probe/run.sh` needs `probe/exhaust.bend`'s expectation updated
+(next follow-up).
