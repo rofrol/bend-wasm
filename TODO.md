@@ -121,6 +121,13 @@ Plan and context: `docs/plan.md`.
   `--toolchain` prints it; a check emits the C of a few programs twice
   from clean caches (and with the patch series) and requires byte-identical
   output, so ordering or environment inputs in the emitter would show.
+- [ ] Requested by the user 2026-10-16: "when will the freestanding build [t-ouqr25cb]
+  on plain clang --target=wasm32 replace emcc? ask the models". Today the
+  freestanding item sits after the memory work, the browser-only glue and
+  the reproducibility check, and replaces Emscripten only if it passes
+  every gate and is materially smaller; `-sSTANDALONE_WASM` still needs
+  emcc (and so Node), so only plain clang + wasm-ld removes emcc. Timing
+  and criteria decided after a consult round; recorded here.
 - [ ] Freestanding wasm build beside Emscripten (from the Zig request, [t-nt66wuif]
   consult round `20261016-175818-a3e6`), after the memory patch and its
   measurement: first `-sSTANDALONE_WASM --no-entry` with Emscripten's own
