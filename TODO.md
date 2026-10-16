@@ -4,14 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Wasm lane in the differential harness (wasm32, `-mtail-call`, fixed [t-tidzr2vk]
-  memory); every non-excluded program matches native byte for byte.
-  Known from run r-t3hzaln6: with patches 0001 and 0002, 48 of 51 match on
-  wasm32; `reg/nat_chain` and `run/bst_insert` run out of memory and
-  `run/string_algorithms` overflows the stack on wasm32 and wasm64, also
-  with a 1 GiB corpus or a 256 MiB stack, while the same C built natively
-  with `-D__EMSCRIPTEN__` is correct: find the cause (a wasm-only runtime
-  bug, not a size), never exclude them for being slow or big.
 - [ ] Browser check: the pure probe program runs in a page without [t-2zouc2um]
   cross-origin isolation (single worker, no pthreads) with output identical
   to native; record the browsers tried (tail calls are an engine feature).

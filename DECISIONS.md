@@ -154,3 +154,16 @@ within the 16 KiB slack; checked by the coordinator in `comp.ts` 4322-4415,
 loudly (they run on the helper thread); probes `random.bend` and
 `process.bend`. The wasm stack default stays 8 MiB (coordinator's
 decision, see the item).
+
+## Wasm lane (t-tidzr2vk)
+
+Done 2026-10-16 (run r-qvpqkr2n): `tests/differential/run.sh` has a wasm
+lane (flags in `scripts/wasm-flags`, shared with `probe/run.sh`); all 51
+programs match native on the JS and wasm lanes. The three earlier wasm
+mismatches had one cause: the work-loop segments take `Env e` (two
+pointers) through `musttail`, and wasm passes that struct indirectly
+through the caller's frame, which the tail call frees, so `e.alc` read 0
+(UBSan/SAFE_HEAP evidence in `docs/probe.md`; `comp.ts` 2854 and 3420
+checked by the coordinator). Patch 0002 passes the two words instead under
+Emscripten; native C is unchanged. The finding goes into the upstream
+offer (t-yuiyk4uz).
