@@ -182,3 +182,11 @@ it. Safari and Firefox not tried.
 The user 2026-10-16: bend-wasm is wasm for Bend for the Robokill space;
 why guix? ask the models. The printer bench (guix-bend code) is dropped as
 out of scope; mutation seeds, held-out set and ledger go to a consult round.
+Consult round `20261016-145116-5f6f` (sol, mimo, deepseek, argon, wonder),
+decided by the coordinator: no ledger (git and the harness summary with
+toolchain and patch hash suffice; mimo, argon, wonder against), no held-out
+set now (patches are diagnosis-driven; Robokill's replay is the held-out
+test; revisit before claiming general compatibility upstream), narrowed
+negative checks after library mode (TODO). Accepted extras: heap bound on
+the real `step` path, first divergent frame kept, trap recovery, tab
+memory with the 512 MiB corpus.
