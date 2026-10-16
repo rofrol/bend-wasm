@@ -9,6 +9,11 @@ Plan and context: `docs/plan.md`.
   mapping fails, compile-time knobs for corpus and stack size with today's
   native defaults. Check: the differential harness, native vs JS lane,
   unchanged with and without the patch.
+- [ ] Follow-up of t-u66qb3n7: the patch recipe in `patches/README.md` [t-vnargpue]
+  (`git diff`) leaves a single space on empty context lines, which the
+  `whitespace` check rejects; make the recipe produce patches that pass
+  `git diff --check` and still apply byte for byte (found by run
+  r-zyipygvj).
 - [ ] Patch 0002, Emscripten (`#if defined(__EMSCRIPTEN__)`): wasm32, fixed [t-h3ak74p5]
   corpus mapped once with no in-place growth and an explicit exhaustion
   error, a small stack with an explicit bound check (Emscripten's
@@ -16,6 +21,15 @@ Plan and context: `docs/plan.md`.
   when reached. Check: `probe/run.sh` programs run under Node with stdout
   and exit code identical to native; a deep-recursion and an exhaustion
   program fail with the explicit errors.
+  Decided by the coordinator 2026-10-16 from run r-zyipygvj (patch 0001):
+  wasm64 already matches native with 0001 alone; wasm32 matches with
+  `-DBEND_CORPUS_BYTES` of 512 MiB or 1 GiB and an 8 MiB stack, while
+  256 MiB fails the runtime's own layout check ("the GPU span is under the
+  rings, stacks and a page per lane"). The Emscripten default corpus is
+  derived from that layout check for one worker (smallest accepted size,
+  rounded up to a power of two), not guessed, and the patch header states
+  the arithmetic; memory growth stays off, with `INITIAL_MEMORY` sized to
+  hold it.
 - [ ] Wasm lane in the differential harness (wasm32, `-mtail-call`, fixed [t-tidzr2vk]
   memory); every non-excluded program matches native byte for byte.
 - [ ] Browser check: the pure probe program runs in a page without [t-2zouc2um]
