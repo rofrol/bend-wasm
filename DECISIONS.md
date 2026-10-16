@@ -265,3 +265,10 @@ with wasm (the fixed corpus) against 4.5 to 15 MiB with JS; wasm load
 157 to 362 ms, almost all `bend_init` (134 to 344 ms), against 6 to 40 ms
 for the JS import. Node agreed (p95 ratio 0.23 to 0.24). The result goes
 to Robokill's coordinator for its decision 0003.
+
+## Disk guard (d-fi6mbciu)
+
+2026-10-16: herdr refused to start t-jc2zvbct below 15 GiB free (9.8 GiB).
+The user freed space (14 GiB free); the coordinator deleted the worker
+folder's regenerable `.toolchain/` cache (2.0 GiB) under the standing
+approval; 16 GiB free.
