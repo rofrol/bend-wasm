@@ -4,10 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Pin Bend 2.0.35 (commit 79df8d9 of https://github.com/bendlang/bend) and [t-3fa5ws5p]
-  a Bun version the way `~/personal_projects/herdr-bend` does (vendor
-  submodule plus `scripts/bend`), and install Emscripten pinned by version;
-  record the toolchain in `docs/workflow.md`.
 - [ ] Probe: compile a hello world and a pure arithmetic program through [t-jk5jg2zk]
   `bend -o x.c` and `emcc` with build flags only; record every error in
   `docs/probe.md` and classify each blocker as shim-able, emitter change or
