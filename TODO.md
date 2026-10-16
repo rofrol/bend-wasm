@@ -70,7 +70,7 @@ Plan and context: `docs/plan.md`.
   `bend_init` 140 to 0 ms, hash unchanged). Only the header `[0, ALC_OFF)`
   and the ring get/put counters need zero (audit: garbage elsewhere gives
   identical output). Gates: differential, negative, replay, heap bound;
-  Node RSS and `bend_init` time reported. [t-xes4fk35]
+  Node RSS and `bend_init` time reported (replaces t-xes4fk35).
 - [ ] Wasm memory, step 2 (from the same audit): under `__EMSCRIPTEN__` a [t-fkta2jvt]
   host layout without the device-only areas (ALC rows 8 MiB, Term stacks
   256 MiB; the host keeps `ALC[w]` static and stacks in `pool_stack`),
