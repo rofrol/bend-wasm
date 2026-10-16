@@ -1,0 +1,191 @@
+Emscripten platform support in the C runtime template (bend2/comp.ts).
+Every change is under #if defined(__EMSCRIPTEN__), so native builds emit
+the same C and behave as before. The target is wasm32 with
+-sALLOW_MEMORY_GROWTH=0 and one worker (docs/decisions/0001 of bend-wasm).
+
+- Term stack overflow: pool_stack maps the stack with a PROT_NONE guard
+  page and catches SIGSEGV/SIGBUS on a sigaltstack; Emscripten's mprotect
+  is a stub and wasm raises no signals, so an overflow would overwrite
+  memory silently. Under Emscripten pool_stack maps no guard page and sets
+  no signal handlers, and WL_ROOM (on native a check on the device only)
+  stops before a frame would pass the stack's end with ERR_DEEP, the same
+  "memory fault (machine stack overflow?)" as the native signal handler.
+- Defaults (still overridable with -D): BEND_CORPUS_BYTES 512 MiB and
+  BEND_STACK_BYTES 8 MiB. The corpus default comes from corpus_lay's
+  check, cap = (span - HEAP_OFF) / (PAGE_LEN + 10) > CUBE, with span the
+  corpus in words and the CPU's CUBE_LOG 7: ALC_OFF = 256 (for WL_RESW up
+  to 96), RING_OFF = 256 + 16384 * 2 * 32 = 1,048,832, STAK_OFF = RING_OFF
+  + 16384 * 1026 = 17,858,816, STAT_OFF = STAK_OFF + 16384 * 2048 =
+  51,413,248, so HEAP_OFF = 51,413,248 + PAGE_UP(STAT_LEN) words. cap >
+  16384 needs span - HEAP_OFF >= 16385 * 138 = 2,261,130 words, so span >=
+  53,674,378 words plus the static image: 429,395,024 bytes (409.5 MiB)
+  plus 8 bytes per static word. The next power of two, 512 MiB, holds
+  static images up to 13.4 million words; 256 MiB fails the check. The
+  layout does not depend on the worker count (CUBE_T lanes always).
+  The stack default is 8 MiB, the stack of patch 0001's wasm32 run. The
+  differential corpus does not bound it from below: every program that
+  runs on wasm32 at 8 MiB (48 of 51) also runs at 512 bytes (2^9), and
+  2^8 stops float_printing and fork_shared_flat with ERR_DEEP; no program
+  of the corpus is deep. 8 MiB holds a million one-word frames
+  (bend-wasm's probe/deep.bend pushes 20 million and overflows it).
+- One worker: main forces the thread count to 1, and --threads above 1
+  fails with "more than one thread is not supported on this target", so
+  pool_open starts no pthread.
+- corpus_grow fails at once, so a full corpus ends in the runtime's
+  out-of-memory error (ERR_HEAP): memory growth is off and the corpus is
+  mapped once.
+- Unsupported effects fail loudly when reached, through err_fail:
+  io_wait_on (every timer or stream wait that would lead to io_wait's
+  blocking select), io_work (the helper pthread of files, processes and
+  random numbers) and io_sys_addr (where every socket effect starts).
+  Printing (io_out) is unchanged.
+
+Retired by: an upstream Emscripten/wasm mode of Bend's C runtime
+(https://github.com/bendlang/bend/issues/1598).
+
+diff --git a/bend2/comp.ts b/bend2/comp.ts
+index df6d538..002d222 100644
+--- a/bend2/comp.ts
++++ b/bend2/comp.ts
+@@ -3388,11 +3388,20 @@ using namespace metal;
+     STK(wi) = e.mem[A + wi]; \
+   } \
+   sp += (N - 1) * LANE_STEP;
++#if defined(__EMSCRIPTEN__)
++// Wasm has no guard page (pool_stack), so the host checks room too.
++#define WL_ROOM(N) \
++  if (sp + (N) >= stk_end) { \
++    err_post(e.mem, ERR_DEEP); \
++    return 0; \
++  }
++#else
+ #define WL_ROOM(N) \
+   if (DEVICE && sp + (N) * CUBE >= e.mem + STAT_OFF + CUBE) { \
+     err_post(e.mem, ERR_DEEP); \
+     return 0; \
+   }
++#endif
+
+ // Types
+ // =====
+@@ -3537,6 +3546,9 @@ static CUfunction gpu_pso;
+ #endif
+ static bool io_gpu;
+ static DEV Term*  io_stk;
++#if defined(__EMSCRIPTEN__)
++static Term*      stk_end;
++#endif
+
+ static const char* CLI_HELP =
+   "usage: %s [options] [arguments]\n"
+@@ -4678,10 +4690,25 @@ static void* pool_mmap(u64 bytes) {
+ }
+
+ // The machine stack of each thread; -D BEND_STACK_BYTES=... changes it.
++#if !defined(BEND_STACK_BYTES) && defined(__EMSCRIPTEN__)
++#define BEND_STACK_BYTES (1ull << 23)
++#endif
+ #ifndef BEND_STACK_BYTES
+ #define BEND_STACK_BYTES (1ull << 31)
+ #endif
+
++#if defined(__EMSCRIPTEN__)
++// mprotect is a stub and wasm raises no SIGSEGV, so there is no guard page:
++// WL_ROOM stops at stk_end. The 16 KiB past it hold the frame a task's
++// entry pushes (WL_FRAME, WL_ARGS), which WL_ROOM does not check. One
++// worker, so one stack.
++static Term* pool_stack(void) {
++  u64   len = BEND_STACK_BYTES;
++  char* p   = pool_mmap(len + 16384);
++  stk_end   = (Term*)(p + len);
++  return (Term*)p;
++}
++#else
+ static Term* pool_stack(void) {
+   u64   len = BEND_STACK_BYTES;
+   char* p   = pool_mmap(len + 16384 + SIGSTKSZ);
+@@ -4695,6 +4722,7 @@ static Term* pool_stack(void) {
+   sigaction(SIGBUS, &sa, NULL);
+   return (Term*)p;
+ }
++#endif
+
+ // A wait yields a while before it sleeps, so a turn that ends (or follows)
+ // within microseconds never pays a condvar wake.
+@@ -5186,7 +5214,12 @@ static void cube_run(u64* H, bool gpu) {
+
+ static u64 corpus_size;
+
+-// The CPU corpus's first size; -D BEND_CORPUS_BYTES=... changes it.
++// The CPU corpus's first size; -D BEND_CORPUS_BYTES=... changes it. On
++// wasm it is the whole corpus (corpus_grow): 512 MiB, the smallest power
++// of two corpus_lay accepts (the patch header has the arithmetic).
++#if !defined(BEND_CORPUS_BYTES) && defined(__EMSCRIPTEN__)
++#define BEND_CORPUS_BYTES (1ull << 29)
++#endif
+ #ifndef BEND_CORPUS_BYTES
+ #define BEND_CORPUS_BYTES (1ull << 33)
+ #endif
+@@ -5231,6 +5264,11 @@ static void corpus_lay(u64* H, u64 size) {
+ }
+
+ static bool corpus_grow(u64* H, u64 need) {
++#if defined(__EMSCRIPTEN__)
++  // Linear memory does not grow (ALLOW_MEMORY_GROWTH=0) and the corpus is
++  // mapped once, so a full corpus is out of memory (ERR_HEAP).
++  return false;
++#endif
+   bool ok = true;
+   LOCK(bank_lock);
+   while (ok && need > a32_load(a32_at(H, H_CAP))) {
+@@ -5384,6 +5422,10 @@ OUTLINE void* io_mem(void* mem) {
+ }
+
+ static int io_sys_addr(const char* host, u32 port, struct sockaddr_in* at) {
++#if defined(__EMSCRIPTEN__)
++  // Every effect that opens or addresses a socket starts here.
++  err_fail("sockets are not supported on this target (wasm)");
++#endif
+   memset(at, 0, sizeof(*at));
+   at->sin_family = AF_INET;
+   at->sin_port   = htons((uint16_t)port);
+@@ -5453,6 +5495,12 @@ static void io_park_add(IoWork* w) {
+ }
+
+ static Term io_wait_on(IoWork* w, int fd, short evts, u64 time, IoPack more) {
++#if defined(__EMSCRIPTEN__)
++  // Only a parked request leads to io_wait's blocking select, which a wasm
++  // page cannot do; parking is refused instead.
++  err_fail("waiting on a timer or a stream is not supported on this target"
++    " (wasm)");
++#endif
+   w->word = (u32)fd;
+   w->pack = more;
+   w->time = time;
+@@ -5644,6 +5692,12 @@ static void* io_help(void* arg) {
+ }
+
+ static Term io_work(IoWork* w, IoCall call, IoPack pack) {
++#if defined(__EMSCRIPTEN__)
++  // A blocking call runs on a helper pthread, which wasm32 without
++  // -pthread does not have.
++  err_fail("blocking effects (files, processes, random numbers) are not"
++    " supported on this target (wasm)");
++#endif
+   w->call  = call;
+   w->pack  = pack;
+   io_busy += 1;
+@@ -6000,6 +6054,13 @@ int main(int argc, char** argv) {
+       io_argv[io_argc++] = argv[i];
+     }
+   }
++#if defined(__EMSCRIPTEN__)
++  // One worker: wasm32 without -pthread starts no pool thread.
++  if (thr > 1) {
++    err_fail("more than one thread is not supported on this target (wasm)");
++  }
++  thr = 1;
++#endif
+   bool dev = gpu != 0 && BANGS != 0 && gpu_probe();
+   if (gpu == 1 && BANGS != 0 && !dev) {
+     err_fail("--gpu on, but this binary found no usable GPU (a CUDA GPU needs"

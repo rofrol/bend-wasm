@@ -179,3 +179,79 @@ Not decided here; patching `comp.ts` is the open decision t-3oqripea.
   (blocker 7) and the single-worker path (blocker 6).
 - The upstream issue (t-ymygf5au) can quote the commands above, the two
   runtime errors and blockers 2-5 as its first errors.
+
+## After patches 0001 and 0002
+
+TODO item t-h3ak74p5, run on 2026-10-16. The sections above describe the
+unpatched pin (`BEND_PATCH=0 probe/run.sh` runs it again). With
+`patches/0001-portable-limits.patch` and `patches/0002-emscripten.patch`,
+`probe/run.sh` builds every variant from the patched C; patch 0002 applies
+to every Emscripten build, wasm64 included, so all of them run one worker
+with a 512 MiB corpus mapped once and an 8 MiB Term stack checked by
+`WL_ROOM`. The new variant `w32-patched` is the target:
+`-std=c11 -O2 -mtail-call -sALLOW_MEMORY_GROWTH=0 -sINITIAL_MEMORY=528MB`,
+the 512 MiB corpus plus the 8 MiB stack plus 8 MiB for static data,
+Emscripten's own stack and `malloc` (`hello` aborts with `Aborted(OOM)`
+at 520 MB and runs from 521 MB).
+
+New programs: `probe/deep.bend` (a non-tail recursion 20,000,000 frames
+deep, one word each, past the 8 MiB stack) and `probe/exhaust.bend` (a
+list of 40,000,000 U32 live at once, past the 512 MiB corpus). Their
+first line `# probe-expect:` names the error they must stop with under
+Node; `run.sh` records their native run and does not compare with it.
+
+| Variant | hello | arith | deep | exhaust |
+| --- | --- | --- | --- | --- |
+| `w32` (16 MiB memory, no growth) | `Aborted(OOM)`, exit 1 | same | same | same |
+| `w32-tc-grow` | matches native | matches native | `bend: memory fault (machine stack overflow?)`, exit 1 | `bend: out of memory: run again with a bigger span, as in --gpu 8GB`, exit 1 |
+| `w64` | matches native | matches native | same as `w32-tc-grow` | same as `w32-tc-grow` |
+| `w64-pthread` | matches native | matches native | same | same |
+| `w64-web` | builds, not run | same | same | same |
+| `w32-patched` | matches native | matches native | the stack overflow error, exit 1 | the out-of-memory error, exit 1 |
+
+`w32` fails because Emscripten's `mmap` aborts (`Aborted(OOM)`) instead
+of returning `MAP_FAILED` when the 512 MiB corpus does not fit 16 MiB of
+memory without growth. Native, for the two new programs:
+`scripts/bend probe/deep.bend` (the JS lane, the probe's reference) stops
+with `bend: memory fault (machine stack overflow?)` from about 50,000
+frames (10,000 runs); the clang binary (`scripts/bend probe/deep.bend -o
+deep`) prints `20000000` with its 2 GiB stack, with and without
+`--threads 1`. `exhaust` prints `40000000` on both, the native corpus
+growing in place.
+
+Unsupported effects, each a small program built with the `w32-patched`
+flags and run under Node: `--threads 2` stops with `bend: more than one
+thread is not supported on this target (wasm)`; `IO.sleep` with `bend:
+waiting on a timer or a stream is not supported on this target (wasm)`;
+`TCP.connect` with `bend: sockets are not supported on this target
+(wasm)`; `vendor/bend/tests/io/file_binary.bend` with `bend: blocking
+effects (files, processes, random numbers) are not supported on this
+target (wasm)`; each after the output printed before it. A program using
+`IO.random_u32` does not compile (`getrandom` is undeclared: its effect
+includes `sys/random.h` only on Linux); `Process.run` was not tried.
+
+### The differential corpus on wasm32
+
+Every program of `tests/differential/corpus.txt` built with the
+`w32-patched` flags and run under the SDK's Node, compared byte for byte
+(stdout and exit code) with the native lane of `tests/differential/run.sh`
+(not part of the harness yet; that is t-tidzr2vk): **48 of 51 match.**
+
+| Program | wasm32 | First diff line (native) |
+| --- | --- | --- |
+| `reg/nat_chain` | `bend: out of memory: ...`, exit 1 | `411210` |
+| `run/bst_insert` | `bend: out of memory: ...`, exit 1 | `12589` |
+| `run/string_algorithms` | `bend: memory fault (machine stack overflow?)`, exit 1 | `4` |
+
+None comes from patch 0002: with patch 0001 alone, wasm64 with growth
+fails the same programs (`nat_chain` out of memory, `bst_insert` and
+`string_algorithms` `RuntimeError: memory access out of bounds`), and a
+1 GiB corpus or a 256 MiB stack does not help. The native binaries of the
+same C built with `-D__EMSCRIPTEN__` (patch 0002's paths: one worker, no
+growth, 8 MiB stack checked) print the native output, so wasm runs these
+programs differently; finding why belongs to the wasm lane.
+
+Stack size: the 48 programs that run match native with any stack from
+2^9 bytes up; at 2^8, `float_printing` and `fork_shared_flat` stop with
+the stack overflow error, and at 2^7 and 2^6 more programs do, every one
+with that error, never with wrong output.
