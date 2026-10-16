@@ -16,3 +16,8 @@ probe/lib/out/
 tests/negative/out/
 # Builds and outputs of replay/robokill/run.sh
 replay/robokill/out/
+# Builds and outputs of glue/test/run.sh
+glue/out/
+# Lane builds, results and Chrome profiles of bench/robokill/
+bench/robokill/dist/
+bench/robokill/out/
