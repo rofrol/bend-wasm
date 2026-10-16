@@ -144,10 +144,6 @@ Plan and context: `docs/plan.md`.
   the summary, since verify keeps only the tail.
   Decided by the user 2026-10-16 (d-c2aqguer): approved.
 
-## Needs a decision
-
-## Proposed
-
 - [ ] QuickJS as a real compile path (from t-xz35srdq, run r-qhxshnds, [t-5wpa6b2x]
   `docs/quickjs.md`): emitting C works on QuickJS 2026-06-04 for two
   programs with ~200 lines of std/os shims. To make it a path: run the whole
@@ -156,3 +152,8 @@ Plan and context: `docs/plan.md`.
   `globalThis.Bun = {}` with a patch that drops `main.ts`'s Bun guard on
   the emit path, and pin the bundling step (Bun, or esbuild/tsc,
   untested). Running programs needs `bun:ffi`, which QuickJS lacks.
+  Decided by the user 2026-10-16 (d-y55x4t3z): approved.
+
+## Needs a decision
+
+## Proposed
