@@ -36,6 +36,12 @@ Plan and context: `docs/plan.md`.
 - [ ] Offer the patch series upstream on [t-yuiyk4uz]
   https://github.com/bendlang/bend/issues/1598 (the user approves the text
   first).
+  Include the finding of run r-qvpqkr2n: the work-loop segments pass
+  `Env e` (a two-pointer struct, `comp.ts` 2854, 3420) through `musttail`;
+  wasm32/wasm64 pass it indirectly through the caller's frame, which the
+  tail call frees, so `e.alc` read 0 (fixed in patch 0002 by passing two
+  words); Windows x64 also passes 16-byte structs indirectly and may hit
+  the same, unchecked.
 
 ## Needs a decision
 
