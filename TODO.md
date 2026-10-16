@@ -17,6 +17,46 @@ Plan and context: `docs/plan.md`.
   models." (Chrome benchmark, DECISIONS.md "Wasm module, glue and
   benchmark": wasm tab about 536 MiB against 4.5 to 15 MiB for the JS lane;
   Robokill's real heap use is 39,040 words.)
+  Analysis by the coordinator 2026-10-16: two causes. (1) Emscripten
+  6.0.10's `mmap(MAP_ANONYMOUS)` does `memalign` then `memset(ptr, 0,
+  alloc_len)` (`system/lib/libc/emscripten_mmap.c`), so the whole corpus is
+  resident (Node replay peak RSS: wasm 616 MB, JS lane 202 MB, bare Node
+  43 MB) and `bend_init` takes 134 to 344 ms. (2) The corpus layout is
+  GPU-shaped: `CUBE_T` 128, `CUBE` 16,384 lanes, each with a ring (1,026
+  words) and a stack (2,048 words: 256 MiB), plus ALC; `corpus_lay`
+  requires `(span - HEAP_OFF) / (PAGE_LEN + 10) > CUBE`, so the minimum
+  corpus is about 409.5 MiB (`comp.ts` 3462-3497) while Robokill needs
+  0.3 MB of heap.
+  Decided by the coordinator after consult round `20261016-174158-ae98`
+  (sol, mimo, deepseek, argon, wonder; under the user's d-fus365v2 and this
+  request): the items below, in order; no memory growth (detaches JS views,
+  gains nothing once the corpus is small); fast-code-llm's loop is not used
+  to find the fix (a design decision a search would game, e.g. by
+  under-provisioning); later the loop (t-ayhexs3c) may tune lane count and
+  corpus size with memory as a score under these gates.
+- [ ] Audit for a CPU-sized wasm layout (read-only, a report in [t-ap3q3hvo]
+  `docs/memory.md`): every use of `CUBE`, `CUBE_T`, `CUBE_LOG`, `LANES`,
+  `RING_*`, `STAK_*`, `ALC_OFF`, `STAT_*`, `HEAP_OFF` on the CPU path of the
+  pinned `comp.ts` with patches 0001-0003: masks and shifts, lane indexing
+  by worker vs by task, whether one worker touches more than one lane's
+  areas, the ring sentinel words, the meaning of `+ 10` and `> CUBE` in
+  `corpus_lay`, whether any layout offset can reach observable output or
+  hashes, the zeroing assumptions (`mmap` fresh-zero) on init and reset,
+  and how much of the corpus a run actually touches (measure). End with
+  the smallest patch shape for (a) a CPU-sized layout or (e) a split heap,
+  and (b) a corpus without Emscripten's memset, with risks; no code change.
+- [ ] Patch 0004 (or an extension of 0002), wasm memory, from the audit: [t-xes4fk35]
+  CPU-sized layout under `__EMSCRIPTEN__`, the corpus from fresh linear
+  memory without a memset, a fixed corpus sized from a stress run (the
+  worst Robokill states, not the steady 39,040 words) with stated headroom
+  and an explicit exhaustion error, `INITIAL_MEMORY` lowered to match.
+  Gates: differential, negative, replay (hashes and render bytes), heap
+  bound, deliberate exhaustion and lane-boundary tests the audit names.
+- [ ] Memory measurement in the benchmark: report [t-2lsz77ug]
+  `WebAssembly.Memory.buffer.byteLength`, `measureUserAgentSpecificMemory`
+  and the renderer process's resident footprint from the OS (macOS), each
+  after init and after the replay, at events the page posts; compare the
+  JS lane; rerun the Chrome benchmark after the memory patch.
 - [ ] Offer the patch series upstream on [t-yuiyk4uz]
   https://github.com/bendlang/bend/issues/1598 (the user approves the text
   first).
