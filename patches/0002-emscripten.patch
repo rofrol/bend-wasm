@@ -19,18 +19,38 @@ compile the same C and behave as before. The target is wasm32 with
   arity) = 2,000 bytes, inside the 16 KiB reserved past stk_end; WL_CONT
   and WL_IDX write below sp; WL_RETN, WL_POPN and FID_EXIT's pop lower
   it. No push was left uncovered.
-- Defaults (still overridable with -D): BEND_CORPUS_BYTES 512 MiB and
-  BEND_STACK_BYTES 8 MiB. The corpus default comes from corpus_lay's
-  check, cap = (span - HEAP_OFF) / (PAGE_LEN + 10) > CUBE, with span the
-  corpus in words and the CPU's CUBE_LOG 7: ALC_OFF = 256 (for WL_RESW up
-  to 96), RING_OFF = 256 + 16384 * 2 * 32 = 1,048,832, STAK_OFF = RING_OFF
-  + 16384 * 1026 = 17,858,816, STAT_OFF = STAK_OFF + 16384 * 2048 =
-  51,413,248, so HEAP_OFF = 51,413,248 + PAGE_UP(STAT_LEN) words. cap >
-  16384 needs span - HEAP_OFF >= 16385 * 138 = 2,261,130 words, so span >=
-  53,674,378 words plus the static image: 429,395,024 bytes (409.5 MiB)
-  plus 8 bytes per static word. The next power of two, 512 MiB, holds
-  static images up to 13.4 million words; 256 MiB fails the check. The
-  layout does not depend on the worker count (CUBE_T lanes always).
+- Host layout: one worker on the host keeps its allocator row in the
+  static ALC[w] and its Term stack in pool_stack, so the corpus leaves
+  out the device's per-lane allocator rows (8 MiB) and Term stacks
+  (256 MiB), and holds the rings (CUBE * RING_WORDS words, 128.25 MiB)
+  only when BANGS != 0: a program without ! forks runs work_loop with seq
+  set and never deals a task. RING_OFF is ALC_OFF and STAT_OFF follows
+  the rings, if any. corpus_lay's cap > CUBE (a heap page per device
+  lane) is a GPU requirement, so on the host it asks for two pages (page
+  0 is heap_alloc_miss's scratch page; running out later is ERR_HEAP).
+  CUBE_T, CUBE_LOG, RING_LEN and so the ! schedule stay as they are (a
+  smaller CUBE_T would change the fork order, and RING_WORDS and
+  RING_LOG's 17 assume 128). Offsets never reach output (locations are
+  word indices from the corpus base; bend-wasm's docs/memory.md, part 2).
+- Defaults (still overridable with -D): BEND_STACK_BYTES 8 MiB and
+  BEND_CORPUS_BYTES sized from need, 8 * (HEAP_OFF + 1,280 * (PAGE_LEN +
+  10)) bytes rounded up to 16 KiB: the layout below the heap (header,
+  rings if any, static image) and 1,280 heap pages with their 10 bank
+  words each. Robokill's simulation reaches 305 pages (39,040 words) in
+  its replay and in every worst input built from its own step.bend (2,048
+  bodies in dense collisions, 239 live projectiles, the most their
+  240-frame life allows, every aim; 129 runs), and 481 pages with two
+  states alive at once; bend-wasm's differential programs and probes
+  reach at most 129 (its out-of-memory probe aside). 1,280 pages are 40
+  of the 32-page quanta the allocator takes per size class, 4.2 times
+  Robokill's need: a factor of 4 so that a game's state can grow by a
+  few kinds of objects, or a host can hold a second state, before it
+  meets ERR_HEAP, at a cost of untouched pages only. For a program without ! forks and a small static
+  image that is 1,425,408 bytes (1.36 MiB); with ! forks the rings add
+  134,479,872 bytes (about 129.6 MiB in all), of which a run touches only
+  the first slot rows. A full corpus stops with the runtime's
+  out-of-memory error (ERR_HEAP); a -DBEND_CORPUS_BYTES too small for the
+  layout stops at start (bend_init, or main) with its own error.
   The stack default is 8 MiB, the stack of patch 0001's wasm32 run. The
   differential corpus does not bound it from below: every program that
   runs on wasm32 at 8 MiB (48 of 51) also runs at 512 bytes (2^9), and
@@ -83,7 +103,7 @@ Retired by: an upstream Emscripten/wasm mode of Bend's C runtime
 (https://github.com/bendlang/bend/issues/1598).
 
 diff --git a/bend2/comp.ts b/bend2/comp.ts
-index 5a869ac..122c248 100644
+index 5a869ac..1f91627 100644
 --- a/bend2/comp.ts
 +++ b/bend2/comp.ts
 @@ -2851,8 +2851,8 @@ export function compile_book(book: Bend.Book): string {
@@ -137,7 +157,26 @@ index 5a869ac..122c248 100644
 
  // Types
  // =====
-@@ -3537,6 +3557,9 @@ static CUfunction gpu_pso;
+@@ -3491,9 +3511,18 @@ typedef u32 __attribute__((may_alias)) u32a;
+
+ #define PAGE_UP(n) (((n) + PAGE_LEN - 1) & ~(PAGE_LEN - 1))
+ #define ALC_OFF  PAGE_UP(H_BANK + 3 * NCLS_ALL)
++#if defined(__EMSCRIPTEN__)
++// One worker on the host: the device's per-lane allocator rows and Term
++// stacks are not in the corpus (the host's are ALC[w] and pool_stack), and
++// the rings are there only when a ! fork can deal tasks (BANGS != 0).
++#define RING_OFF ALC_OFF
++#define STAK_OFF (RING_OFF + (BANGS ? CUBE * RING_WORDS : 0))
++#define STAT_OFF STAK_OFF
++#else
+ #define RING_OFF (ALC_OFF + CUBE * 2 * NCLS_ALL)
+ #define STAK_OFF (RING_OFF + CUBE * RING_WORDS)
+ #define STAT_OFF (STAK_OFF + CUBE * STAK_LEN)
++#endif
+ #define HEAP_OFF (STAT_OFF + PAGE_UP(STAT_LEN))
+
+ // Globals
+@@ -3537,6 +3566,9 @@ static CUfunction gpu_pso;
  #endif
  static bool io_gpu;
  static DEV Term*  io_stk;
@@ -147,7 +186,7 @@ index 5a869ac..122c248 100644
 
  static const char* CLI_HELP =
    "usage: %s [options] [arguments]\n"
-@@ -4678,10 +4701,30 @@ static void* pool_mmap(u64 bytes) {
+@@ -4678,10 +4710,30 @@ static void* pool_mmap(u64 bytes) {
  }
 
  // The machine stack of each thread; -D BEND_STACK_BYTES=... changes it.
@@ -178,7 +217,7 @@ index 5a869ac..122c248 100644
  static Term* pool_stack(void) {
    u64   len = BEND_STACK_BYTES;
    char* p   = pool_mmap(len + 16384 + SIGSTKSZ);
-@@ -4695,6 +4738,7 @@ static Term* pool_stack(void) {
+@@ -4695,6 +4747,7 @@ static Term* pool_stack(void) {
    sigaction(SIGBUS, &sa, NULL);
    return (Term*)p;
  }
@@ -186,16 +225,19 @@ index 5a869ac..122c248 100644
 
  // A wait yields a while before it sleeps, so a turn that ends (or follows)
  // within microseconds never pays a condvar wake.
-@@ -5186,11 +5230,32 @@ static void cube_run(u64* H, bool gpu) {
+@@ -5186,11 +5239,35 @@ static void cube_run(u64* H, bool gpu) {
 
  static u64 corpus_size;
 
 -// The CPU corpus's first size; -D BEND_CORPUS_BYTES=... changes it.
 +// The CPU corpus's first size; -D BEND_CORPUS_BYTES=... changes it. On
-+// wasm it is the whole corpus (corpus_grow): 512 MiB, the smallest power
-+// of two corpus_lay accepts (the patch header has the arithmetic).
++// wasm it is the whole corpus (corpus_grow fails), sized from need: the
++// layout below HEAP_OFF (header, the rings of a program with ! forks, the
++// static image) plus 1,280 heap pages with their bank words (the patch
++// header says why 1,280), rounded up to the 16 KiB corpus_setup keeps.
 +#if !defined(BEND_CORPUS_BYTES) && defined(__EMSCRIPTEN__)
-+#define BEND_CORPUS_BYTES (1ull << 29)
++#define BEND_CORPUS_BYTES \
++  ((8 * (HEAP_OFF + 1280 * (PAGE_LEN + 10)) + 16383) & ~16383ull)
 +#endif
  #ifndef BEND_CORPUS_BYTES
  #define BEND_CORPUS_BYTES (1ull << 33)
@@ -220,7 +262,7 @@ index 5a869ac..122c248 100644
  static void* corpus_map(u64 size) {
    u64   hint = 1ull << 45;
    void* p    = MAP_FAILED;
-@@ -5216,6 +5281,7 @@ static void* corpus_map(u64 size) {
+@@ -5216,13 +5293,23 @@ static void* corpus_map(u64 size) {
    }
    return p;
  }
@@ -228,7 +270,23 @@ index 5a869ac..122c248 100644
 
  static void corpus_lay(u64* H, u64 size) {
    u64 span = size / 8;
-@@ -5236,6 +5302,11 @@ static void corpus_lay(u64* H, u64 size) {
+   u64 cap  = span > HEAP_OFF ? (span - HEAP_OFF) / (PAGE_LEN + 10) : 0;
++#if defined(__EMSCRIPTEN__)
++  // The host needs no page per device lane: page 0 is heap_alloc_miss's
++  // scratch page, and running out later is ERR_HEAP.
++  if (cap < 2) {
++    err_fail("the corpus (-DBEND_CORPUS_BYTES) is under its header, rings"
++      " and static image plus two heap pages");
++  }
++#else
+   if (cap <= CUBE) {
+     err_fail("the GPU span is under the rings, stacks and a page per lane");
+   }
++#endif
+   cap = cap < ~0u ? cap : ~0u - 1;
+   u64 at = HEAP_OFF + (cap << PAGE_BITS);
+   for (u32 c = 0; c < NCLS_ALL; c += 1) {
+@@ -5236,6 +5323,11 @@ static void corpus_lay(u64* H, u64 size) {
  }
 
  static bool corpus_grow(u64* H, u64 need) {
@@ -240,7 +298,7 @@ index 5a869ac..122c248 100644
    bool ok = true;
    LOCK(bank_lock);
    while (ok && need > a32_load(a32_at(H, H_CAP))) {
-@@ -5389,6 +5460,10 @@ OUTLINE void* io_mem(void* mem) {
+@@ -5389,6 +5481,10 @@ OUTLINE void* io_mem(void* mem) {
  }
 
  static int io_sys_addr(const char* host, u32 port, struct sockaddr_in* at) {
@@ -251,7 +309,7 @@ index 5a869ac..122c248 100644
    memset(at, 0, sizeof(*at));
    at->sin_family = AF_INET;
    at->sin_port   = htons((uint16_t)port);
-@@ -5458,6 +5533,12 @@ static void io_park_add(IoWork* w) {
+@@ -5458,6 +5554,12 @@ static void io_park_add(IoWork* w) {
  }
 
  static Term io_wait_on(IoWork* w, int fd, short evts, u64 time, IoPack more) {
@@ -264,7 +322,7 @@ index 5a869ac..122c248 100644
    w->word = (u32)fd;
    w->pack = more;
    w->time = time;
-@@ -5649,6 +5730,12 @@ static void* io_help(void* arg) {
+@@ -5649,6 +5751,12 @@ static void* io_help(void* arg) {
  }
 
  static Term io_work(IoWork* w, IoCall call, IoPack pack) {
@@ -277,7 +335,7 @@ index 5a869ac..122c248 100644
    w->call  = call;
    w->pack  = pack;
    io_busy += 1;
-@@ -6005,6 +6092,13 @@ int main(int argc, char** argv) {
+@@ -6005,6 +6113,13 @@ int main(int argc, char** argv) {
        io_argv[io_argc++] = argv[i];
      }
    }

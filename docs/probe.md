@@ -183,7 +183,8 @@ Not decided here; patching `comp.ts` is the open decision t-3oqripea.
 ## After patches 0001 and 0002
 
 TODO item t-h3ak74p5, run on 2026-10-16. The sections above describe the
-unpatched pin (`BEND_PATCH=0 probe/run.sh` runs it again). With
+unpatched pin (`probe/run.sh` runs those variants on it again, "After
+step 2" below). With
 `patches/0001-portable-limits.patch` and `patches/0002-emscripten.patch`,
 `probe/run.sh` builds every variant from the patched C; patch 0002 applies
 to every Emscripten build, wasm64 included, so all of them run one worker
@@ -287,6 +288,42 @@ Stack size (before the fix above): the 48 programs that ran matched native with 
 2^9 bytes up; at 2^8, `float_printing` and `fork_shared_flat` stop with
 the stack overflow error, and at 2^7 and 2^6 more programs do, every one
 with that error, never with wrong output.
+
+## After step 2
+
+TODO item t-fkta2jvt, 2026-10-16. `probe/run.sh` exits 0 again, with each
+variant's expected result stated in it:
+
+- `w32`, `w32-tc-grow`, `w64`, `w64-pthread` and `w64-web` document the
+  original probe, so they build the unpatched pin's C (`BEND_PATCH=0`).
+  Expected, as above: no program runs. A run stops before any Bend code
+  with exit 1, no stdout and `bend: reservation failed` or
+  `RuntimeError: memory access out of bounds`; `random` and `process` do
+  not build (`getrandom` and `posix_spawn_file_actions_addclosefrom_np`
+  undeclared, which patch 0002 fixed); `w64-web` otherwise builds.
+- `w32-patched` builds the series' C with `scripts/wasm-flags`: stdout
+  and exit 0 equal to native, or the program's `# probe-expect:` error
+  with exit 1. A `# probe-cflags:` line adds build flags.
+- The native reference is now the clang binary run with `--threads 1`
+  (wasm runs one worker), not the JS lane, whose stack ends near 50,000
+  frames.
+
+The step's tests (`docs/memory.md`, "After step 2"), all on
+`w32-patched`:
+
+| Program | What it checks | Expected |
+| --- | --- | --- |
+| `forks.bend` | a `!` fork tree of depth 22, so the corpus holds the rings | matches native |
+| `forks-small.bend` | the same with `-DBEND_CORPUS_BYTES=4194304`, too small for the rings | `bend: the corpus (-DBEND_CORPUS_BYTES) is under its header, rings and static image plus two heap pages` at start |
+| `deep-fit.bend` | 1,048,571 one-word frames, the deepest the 8 MiB Term stack holds | matches native |
+| `deep.bend` | one frame more | `bend: memory fault (machine stack overflow?)` |
+| `exhaust-fit.bend` | a list of 77,824 U32, the longest the default corpus holds | matches native |
+| `exhaust.bend` | one cell more | `bend: out of memory: ...` |
+| `rings.c` (driver of `forks`) | the top ring (16383) ends the ring area; 1,024 pushes fit it without touching the static image, push 1,025 posts `ERR_RING` | native and wasm print the same lines, exit 1, `bend: runtime fail-stop` |
+
+A Bend program cannot fill a ring on one worker (`forks.bend` pushes 510
+tasks, at most one per ring at a time, into rings 0 to 255), so
+`rings.c` includes the program's C and calls `ring_push` itself.
 
 ## Browser
 

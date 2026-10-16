@@ -4,10 +4,19 @@
 # wasm32 with tail calls and fixed memory. probe/run.sh and the wasm lane
 # of tests/differential/run.sh both build with these.
 #
-# The 528 MB hold the static image, which patch 0002 makes hold the
-# 512 MiB corpus and the 8 MiB + 16 KiB Term stack as zeroed .bss
-# (wasm-ld needs 545,736,288 bytes, 520.5 MiB, for Robokill's step.c: 520
-# MB fails at link time), plus Emscripten's 64 KiB stack and about 7.5 MiB
-# for malloc. Only the touched pages are resident (docs/memory.md, "After
-# step 1").
-echo '-std=c11 -O2 -mtail-call -sALLOW_MEMORY_GROWTH=0 -sINITIAL_MEMORY=528MB'
+# The memory is what the linker needs plus a stated malloc heap: with no
+# INITIAL_MEMORY, wasm-ld sizes it per program as the static image (patch
+# 0002's corpus, sized from the program's layout, and its 8 MiB + 16 KiB
+# Term stack, both zeroed .bss), Emscripten's 64 KiB stack and
+# INITIAL_HEAP for malloc, and it never grows. For Robokill's step.c that
+# is 10,455,536 bytes plus the heap, 11,534,336 in all (11 MiB); a
+# program with ! forks adds the rings' 128.25 MiB. malloc serves only the
+# host side: 5,264 bytes in every differential and probe program (stdio)
+# and 5,648 in Robokill's replay driver, plus IO.print's UTF-8 buffer.
+# 1 MiB is about 190 times the fixed use, and holds by arithmetic the
+# buffer of the longest String the default corpus can hold (163,840 heap
+# words, two per character: at most 327,680 bytes, a 512 KiB buffer and
+# 768 KiB while realloc moves it). A failed malloc stops the run with
+# "bend: host allocation failed" (docs/memory.md, "After step 2"). Only
+# the touched pages are resident.
+echo '-std=c11 -O2 -mtail-call -sALLOW_MEMORY_GROWTH=0 -sINITIAL_HEAP=1MB'

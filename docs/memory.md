@@ -596,3 +596,146 @@ Side effect: `probe/run.sh`'s exploratory variants with
 `w64-pthread`, `w64-web`) no longer link ("initial memory too small"),
 since the static image now holds the corpus; `w32` (no growth) now runs
 and matches native. `w32-patched` is unchanged.
+
+## After step 2
+
+TODO t-fkta2jvt, shape (e) of part 5. Toolchain: bend 79df8d9, patches
+0001 to 0003 (this change), bun 1.4.2, emcc 6.0.10, the SDK's Node
+v24.19.0, Apple M1 Pro.
+
+### What changed
+
+- Patch 0002, under `__EMSCRIPTEN__`: `RING_OFF` is `ALC_OFF`, the rings
+  (`CUBE * RING_WORDS` words) are there only when `BANGS != 0`, and
+  `STAT_OFF` follows them. `corpus_lay` asks for two heap pages instead
+  of `cap > CUBE`. `CUBE_T` stays 128, so the `!` schedule is unchanged.
+  Natively the preprocessed C of `probe/hello` and `probe/forks` is
+  identical to the step-1 series (`clang -E`), and the differential's
+  native lane is unchanged.
+- `BEND_CORPUS_BYTES` on wasm is sized from need:
+  `8 * (HEAP_OFF + 1,280 * (PAGE_LEN + 10))` rounded up to 16 KiB, the
+  layout below the heap (header, rings if any, static image) plus 1,280
+  heap pages and their bank words. A smaller `-DBEND_CORPUS_BYTES` that
+  cannot hold the layout plus two pages stops at start with "bend: the
+  corpus (-DBEND_CORPUS_BYTES) is under its header, rings and static
+  image plus two heap pages".
+- `scripts/wasm-flags`: `-sINITIAL_HEAP=1MB` instead of
+  `-sINITIAL_MEMORY=528MB`. wasm-ld then sizes the memory as the static
+  image (corpus, Term stack), Emscripten's 64 KiB stack and 1 MiB for
+  malloc, per program; it still never grows (`--no-growable-memory`). A
+  fixed `INITIAL_MEMORY` would have to be raised by hand for every
+  program with `!` forks or a bigger `-DBEND_CORPUS_BYTES`; this way the
+  memory is always what the linker needs plus the stated heap.
+
+### Sizing the corpus: the stress run
+
+A native scratch driver (not committed) linked `step.bend`'s library-mode
+C and ran `init(n, seed)`, then `step`, `render` and `hash` every frame,
+and printed `bend_heap_words` (the high-water mark). Inputs come only
+from `step.bend`'s own interface: n up to its maximum 2,048, the replay's
+inputs, fire every frame with each of the 16 aims, fire every frame with
+the aim turning every frame, and no fire; seeds 12345, 1 and 2^32 - 1;
+3,000 frames each, plus the replay of 10,000 frames. The driver counted
+the live projectiles (render slots with atlas >= 0) and, every 100th
+frame, the pairs of bodies closer than 8 units.
+
+| Inputs | Runs | Heap high-water | Live projectiles, max | Close pairs, max |
+| --- | --- | --- | --- | --- |
+| replay, n = 500 and 2,000, 10,000 frames | 2 | 305 pages (39,040 words) | | |
+| n = 2,000 and 2,048, 19 input modes, 3 seeds | 114 | 305 pages in every run | 44 | 124 |
+| n = 0, 1 and 64, fire every frame, 5 aims | 15 | 305 pages in every run | 239 | |
+
+239 is the most projectiles alive at once: one spawns per frame and
+lives 240 frames, and 2,048 bodies kill them sooner. The high-water does
+not move with the state because the allocator takes memory in quanta of
+32 pages per size class and frees every frame's garbage. Holding two
+states at once (`init` twice, the first never disposed) reaches 481
+pages (61,568 words). The other programs, natively at one thread: every
+differential program and the step-1 probe programs reach at most 129
+pages, except `probe/exhaust`.
+
+1,280 pages are 4.2 times 305: a factor of 4, rounded up to whole
+quanta (40), so that the game's state can grow by a few kinds of objects
+or a host can hold a second state before `ERR_HEAP`. Untouched pages are
+not resident, so the headroom costs address space only. For Robokill the
+corpus is 1,425,408 bytes (1.36 MiB, 1,289 heap pages).
+
+Past it, the runtime's out-of-memory error ends the run:
+
+- `probe/exhaust.bend` (77,825 live list cells) stops with "bend: out of
+  memory: run again with a bigger span, as in --gpu 8GB", exit 1, and
+  `probe/exhaust-fit.bend` (77,824) runs and matches native.
+- Robokill's library built with a 250-page corpus
+  (`-DBEND_CORPUS_BYTES=278528`) stops in the n = 2,000 replay with the
+  same message, exit 1 (one-off, not committed).
+- `tests/negative`'s leak mutant (a task node per library call) at the
+  default corpus stops the same way between steps 10,000 and 20,000. So
+  `probe/lib/run.sh` builds its wasm module with a 16 MiB corpus: its
+  heap bound must see that leak grow to the 100,000-step checkpoint
+  (815,232 words), as the negative check requires.
+
+The message names a GPU flag a wasm build does not have; its text is
+shared with the JS lane (`ERRS` in `comp.ts`) and was left as it is.
+
+### Programs with `!` forks
+
+They need the rings: 16,809,984 words (128.25 MiB) below the static
+image, so their default corpus is 135,905,280 bytes and their memory
+146,210,816 bytes (`probe/forks`). A run touches only the first slot rows:
+`probe/forks` (4,194,304 leaves) is 50.2 to 50.6 MiB resident in Node
+after the run, `probe/hello` 46.8 to 46.9 MiB. On one worker the rings
+never get full: a fork tree of depth 22 pushes 510 tasks, at most one per
+ring at a time, into rings 0 to 255, with a frontier of 2 (instrumented
+scratch build), so `ERR_RING` cannot be reached from a Bend program here,
+and the frontier never reaches `CUBE` (part 5's "depth 14 or more" holds
+for many workers only). `probe/rings.c` tests the boundary directly.
+
+The seven `tests/run` programs with `!(` (`array_fork`,
+`fork_leaf_result_loop`, `stencil3d`, `array_atomic_fadd`,
+`array_redirect_race`, `gpu_mark`, `gpu_trig`) print in wasm exactly what
+their native binaries print with `--threads 1` (one-off, not committed).
+
+### What the linker needs
+
+wasm-ld reports 10,455,536 bytes of static image and stack for
+Robokill's `step.c` (the 8 MiB + 16 KiB Term stack is most of it; 8 MB
+fails at link time). malloc serves only the host: measured with `sbrk`
+around each run, 5,264 bytes in every differential and probe program and
+5,648 in Robokill's replay driver. IO.print's UTF-8 buffer is the only
+growing use; by arithmetic the longest String the default corpus holds
+needs at most a 512 KiB buffer, 768 KiB while `realloc` moves it, inside
+the 1 MiB heap. A failed malloc ends the run with "bend: host allocation
+failed".
+
+### The tests (`probe/`, `docs/probe.md`, "After step 2")
+
+- Lane boundaries: `probe/forks.bend` against native `--threads 1`;
+  `probe/rings.c` checks that ring 0 starts the area and the top ring's
+  put word ends it, right below the static image on wasm.
+- Ring near full: `probe/rings.c` pushes 1,024 tasks into the top ring
+  (no error, static image intact), and the 1,025th stops the run with
+  `ERR_RING`'s "bend: runtime fail-stop", natively and in wasm, after the
+  line that names the push.
+- Term stack near its limit: `probe/deep-fit.bend` (1,048,571 frames)
+  runs, `probe/deep.bend` (1,048,572) stops with `ERR_DEEP`.
+- Exhaustion: `probe/exhaust-fit.bend` and `probe/exhaust.bend` (above),
+  and `probe/forks-small.bend`, whose corpus cannot hold its rings.
+
+### Measurements
+
+Robokill through its library build (`replay/robokill/out/step.mjs` of
+`replay/robokill/run.sh`, `scripts/wasm-flags`), replays n = 500 and
+n = 2,000 to frame 10,000 in one instance, hashes 603820250 and
+819172968, three runs; a scratch script reads
+`HEAPU8.buffer.byteLength`, Node's RSS and the time of `bend_init`:
+
+| Build | `bend_init` | RSS after init | RSS after replay | `memory.buffer.byteLength` |
+| --- | --- | --- | --- | --- |
+| step 1 (glue, from above) | 0.1 to 0.5 ms | 47.9 to 48.0 MiB | 51.0 to 58.4 MiB | 553,648,128 |
+| step 2 | 0.10 to 0.40 ms | 46.1 MiB | 54.0 MiB | 11,534,336 |
+
+Bare Node: 42.3 to 42.5 MiB. The step-1 row was measured through the
+glue, this one on the module directly, so the RSS rows compare only
+roughly; the linear memory falls from 528 MiB to 11 MiB.
+
+Not measured: Chrome's tab (t-2lsz77ug).
