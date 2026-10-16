@@ -123,3 +123,9 @@ in `corpus_map`. Native is byte-identical (the differential harness, with
 and without the patch). Effect: wasm64 probe programs match native; wasm32
 fails explicitly by default and matches native with a 512 MiB corpus and an
 8 MiB stack. Open points went into TODO (t-vnargpue, t-h3ak74p5).
+
+## Patch recipe whitespace (t-vnargpue)
+
+Done 2026-10-16 (run r-6npk7ina): the recipe in `patches/README.md` pipes
+`git diff` through `sed 's/^ $//'`, so patches pass the `whitespace` check
+and still apply byte for byte (checked by regenerating 0001).

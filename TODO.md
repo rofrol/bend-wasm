@@ -4,11 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Follow-up of t-u66qb3n7: the patch recipe in `patches/README.md` [t-vnargpue]
-  (`git diff`) leaves a single space on empty context lines, which the
-  `whitespace` check rejects; make the recipe produce patches that pass
-  `git diff --check` and still apply byte for byte (found by run
-  r-zyipygvj).
 - [ ] Patch 0002, Emscripten (`#if defined(__EMSCRIPTEN__)`): wasm32, fixed [t-h3ak74p5]
   corpus mapped once with no in-place growth and an explicit exhaustion
   error, a small stack with an explicit bound check (Emscripten's
