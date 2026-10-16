@@ -30,6 +30,10 @@ Plan and context: `docs/plan.md`.
 - [ ] How does t-3fa5ws5p get its network steps, given that herdr workers [t-7qwx2nm3]
   have no network by design?
   Options: the coordinator runs only the network steps (git submodule add of vendor/bend at v2.0.35, emsdk SDK download into ~/.cache/bend-wasm/emsdk-<ver>) and commits the submodule, then a worker writes scripts/bend, scripts/emcc (EM_CACHE inside the repository) and docs/workflow.md offline | the coordinator does the whole item itself | a herdr per-repository worker network allowlist (github.com, storage.googleapis.com), a herdr TODO item and a security boundary change
+  Decided by the user 2026-10-16 (d-6x44i4p5): the coordinator fetches
+  (vendor/bend submodule at v2.0.35, emsdk SDK into ~/.cache/bend-wasm),
+  a worker does the rest offline. emsdk pin: 6.0.10 (2026-09-21), the
+  newest tag at least two weeks old (6.0.11 is from 2026-10-02).
   Checked: run r-yzprvcca (attempt 1) stopped with WORKER-BLOCKED,
   `git ls-remote` to github.com:443 denied ("host is not on the allow
   list"); herdr `src/workers/mod.rs:283` starts every worker with an empty
