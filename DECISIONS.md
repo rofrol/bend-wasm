@@ -423,3 +423,20 @@ browser-only glue item stays (cheap; the baseline must be clean). Cut
 over cleanly when every criterion holds; keep emcc only as an unshipped
 diagnostic build (ASSERTIONS, SAFE_HEAP); if the size criterion fails,
 emcc stays and the result is recorded.
+
+## Wasm memory step 2 (t-fkta2jvt)
+
+Done 2026-10-16 (run r-55d4hhjj): under `__EMSCRIPTEN__` patch 0002 lays
+out the corpus without the device-only areas, with rings only when
+`BANGS != 0`, and requires two heap pages instead of `> CUBE` on the host;
+`CUBE_T` stays 128; native C is unchanged. The default corpus is the layout
+plus 1,280 heap pages: 4.2 times the high-water of 131 Robokill stress runs
+(305 pages; two live states 481), 1.36 MiB for Robokill; programs with `!`
+also get the rings (128.25 MiB); a too small corpus fails at start.
+`scripts/wasm-flags` uses `-sINITIAL_HEAP=1MB` (decided by the coordinator:
+the linker sizes memory per program, no growth; measured malloc 5.3 KiB)
+instead of a fixed `INITIAL_MEMORY`. Node, Robokill: linear memory
+553,648,128 to 11,534,336 bytes; RSS 46.1 MiB after init and 54.0 after
+the replay (bare Node 42.3); `bend_init` 0.10-0.40 ms. New boundary probes
+(deep/deep-fit, exhaust/exhaust-fit, forks, rings driver). Open points:
+t-ouy36at5.

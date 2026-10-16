@@ -4,25 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Wasm memory, step 2 (from the same audit): under `__EMSCRIPTEN__` a [t-fkta2jvt]
-  host layout without the device-only areas (ALC rows 8 MiB, Term stacks
-  256 MiB; the host keeps `ALC[w]` static and stacks in `pool_stack`),
-  rings only when `BANGS != 0` (fork programs use many rings, assigned per
-  task; 28 measured with one worker), `corpus_lay`'s `> CUBE` (a GPU
-  requirement) not applied on the host; then a corpus sized from a stress
-  run of Robokill's worst states with stated headroom and an explicit
-  exhaustion error, and `INITIAL_MEMORY` lowered to match (the audit puts
-  Robokill's minimum near 331 KiB before headroom). Not a smaller
-  `CUBE_T` (changes `!` fork order; `RING_WORDS` and `RING_LOG`'s 17 are
-  tied to 128). Gates as step 1 plus the audit's lane-boundary,
-  ring-near-full, stack-near-limit and exhaustion tests.
-  Also (from run r-epvs73bi, decided by the coordinator): `probe/run.sh`'s
-  pre-patch variants (`w32`, `w32-tc-grow`, `w64`, `w64-pthread`,
-  `w64-web`) document the original probe, so they run on the pin
-  (`BEND_PATCH=0`), and `w32-patched` on the series; `probe/run.sh` exits 0
-  again with each variant's expected result stated; `docs/probe.md` says
-  so. Step 1 left `INITIAL_MEMORY` at 528MB (wasm-ld needs 520.5 MiB for the
-  static corpus); this step lowers it.
 - [ ] Follow-up of t-fkta2jvt (from run r-55d4hhjj, decided by the [t-ouy36at5]
   coordinator): (1) `tests/negative/run.sh`'s leak case accepts the
   runtime's out-of-memory error (`ERR_HEAP`) on wasm as detection (with the
