@@ -560,3 +560,39 @@ These parts would differ:
 - The hint-truncation bug belongs to any 32-bit target where
   `mmap(NULL)` succeeds, so it should be fixed by pointer width.
 - The `.bss` and shared-memory note applies to wasm-ld either way.
+
+## After step 1
+
+TODO t-uyjzq4hq, shape (b) of part 5. Patch 0001 tries `corpus_map`'s
+address hints only when they fit a pointer (`hint <= UINTPTR_MAX`), so on
+wasm32 it goes straight to `mmap(NULL)`; 64-bit native is unchanged.
+Patch 0002 takes the corpus (`corpus_bss`, `BEND_CORPUS_BYTES`) and the
+Term stack (`pool_stack_bss`, `BEND_STACK_BYTES` + 16 KiB) from static
+zeroed storage under `__EMSCRIPTEN__`: no `mmap`, no memset. Layout and
+sizes are unchanged. It is safe by part 3: only the header and the ring
+get/put words must be zero, wasm memory is zero at instantiation, and
+each instance takes the arrays once (`bend_init` refuses a second call,
+`corpus_grow` fails, `reset()` re-instantiates).
+
+`INITIAL_MEMORY` stays 528 MB: wasm-ld needs 545,736,288 bytes
+(520.5 MiB) of static image and stack for Robokill's `step.c` (520 MB
+fails at link time); the rest is `malloc`'s.
+
+Robokill through the glue (`glue/build.sh` of `replay/robokill/step.bend`,
+both replays n = 500 and n = 2,000 to frame 10,000, hashes 603820250 and
+819172968 in every run), the SDK's Node v24.19.0, three runs each:
+
+| Build | `bend_init` | RSS after init | RSS after replay | `memory.buffer.byteLength` |
+| --- | --- | --- | --- | --- |
+| before (`mmap`, hint loop) | 152 to 250 ms | 567.9 to 568.1 MiB | 313.4 to 578.3 MiB | 553,648,128 |
+| after step 1 | 0.1 to 0.5 ms | 47.9 to 48.0 MiB | 51.0 to 58.4 MiB | 553,648,128 |
+
+Bare Node in the same script: 43.5 to 43.7 MiB. The linear memory keeps
+its size (step 2 shrinks it); what falls is resident memory and start
+time.
+
+Side effect: `probe/run.sh`'s exploratory variants with
+`-sALLOW_MEMORY_GROWTH` and no `INITIAL_MEMORY` (`w32-tc-grow`, `w64`,
+`w64-pthread`, `w64-web`) no longer link ("initial memory too small"),
+since the static image now holds the corpus; `w32` (no growth) now runs
+and matches native. `w32-patched` is unchanged.

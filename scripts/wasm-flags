@@ -4,7 +4,10 @@
 # wasm32 with tail calls and fixed memory. probe/run.sh and the wasm lane
 # of tests/differential/run.sh both build with these.
 #
-# The 528 MB hold the 512 MiB corpus and the 8 MiB Term stack (patch
-# 0002's defaults) and 8 MiB for the static data, Emscripten's own stack
-# and malloc (520 MB aborts with OOM at the stack's mmap).
+# The 528 MB hold the static image, which patch 0002 makes hold the
+# 512 MiB corpus and the 8 MiB + 16 KiB Term stack as zeroed .bss
+# (wasm-ld needs 545,736,288 bytes, 520.5 MiB, for Robokill's step.c: 520
+# MB fails at link time), plus Emscripten's 64 KiB stack and about 7.5 MiB
+# for malloc. Only the touched pages are resident (docs/memory.md, "After
+# step 1").
 echo '-std=c11 -O2 -mtail-call -sALLOW_MEMORY_GROWTH=0 -sINITIAL_MEMORY=528MB'

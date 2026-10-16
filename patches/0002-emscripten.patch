@@ -6,7 +6,7 @@ compile the same C and behave as before. The target is wasm32 with
 - Term stack overflow: pool_stack maps the stack with a PROT_NONE guard
   page and catches SIGSEGV/SIGBUS on a sigaltstack; Emscripten's mprotect
   is a stub and wasm raises no signals, so an overflow would overwrite
-  memory silently. Under Emscripten pool_stack maps no guard page and sets
+  memory silently. Under Emscripten pool_stack has no guard page and sets
   no signal handlers, and WL_ROOM (on native a check on the device only)
   stops before a frame would pass the stack's end with ERR_DEEP, the same
   "memory fault (machine stack overflow?)" as the native signal handler.
@@ -16,7 +16,7 @@ compile the same C and behave as before. The target is wasm32 with
   WL_FRAME and WL_ARGS, and FID_EXIT's (after its pop back to the base),
   push unchecked but always from the stack's base (every work_loop call
   passes the stack itself), at most 3 + 247 words (WIDE bounds a fid's
-  arity) = 2,000 bytes, inside the 16 KiB mapped past stk_end; WL_CONT
+  arity) = 2,000 bytes, inside the 16 KiB reserved past stk_end; WL_CONT
   and WL_IDX write below sp; WL_RETN, WL_POPN and FID_EXIT's pop lower
   it. No push was left uncovered.
 - Defaults (still overridable with -D): BEND_CORPUS_BYTES 512 MiB and
@@ -40,9 +40,23 @@ compile the same C and behave as before. The target is wasm32 with
 - One worker: main forces the thread count to 1, and --threads above 1
   fails with "more than one thread is not supported on this target", so
   pool_open starts no pthread.
+- The corpus and the Term stack are static zero-initialized arrays
+  (corpus_bss of BEND_CORPUS_BYTES, pool_stack_bss of BEND_STACK_BYTES +
+  16 KiB), not mmap: Emscripten's mmap is memalign plus a memset, which
+  made every byte resident and cost bend_init its time. Static storage
+  is enough because the runtime needs zeros only in the corpus header
+  [0, ALC_OFF) and the rings' get/put words (a fresh corpus with any
+  other bytes elsewhere gives identical results; bend-wasm's
+  docs/memory.md, part 3), non-shared wasm memory is zero at
+  instantiation and wasm-ld writes no data for .bss, and nothing reuses
+  the arrays: corpus_setup and pool_stack run once per instance
+  (bend_init refuses a second call, one worker), corpus_grow fails, and
+  re-instantiating the module gives fresh memory. A shared-memory
+  (pthread) build would zero .bss with memory.fill at start: still
+  correct, only slower.
 - corpus_grow fails at once, so a full corpus ends in the runtime's
   out-of-memory error (ERR_HEAP): memory growth is off and the corpus is
-  mapped once.
+  taken once.
 - Unsupported effects fail loudly when reached, through err_fail:
   io_wait_on (every timer or stream wait that would lead to io_wait's
   blocking select), io_work (the helper pthread of files, processes and
@@ -69,7 +83,7 @@ Retired by: an upstream Emscripten/wasm mode of Bend's C runtime
 (https://github.com/bendlang/bend/issues/1598).
 
 diff --git a/bend2/comp.ts b/bend2/comp.ts
-index df6d538..4a7ecdd 100644
+index 5a869ac..122c248 100644
 --- a/bend2/comp.ts
 +++ b/bend2/comp.ts
 @@ -2851,8 +2851,8 @@ export function compile_book(book: Bend.Book): string {
@@ -133,7 +147,7 @@ index df6d538..4a7ecdd 100644
 
  static const char* CLI_HELP =
    "usage: %s [options] [arguments]\n"
-@@ -4678,10 +4701,26 @@ static void* pool_mmap(u64 bytes) {
+@@ -4678,10 +4701,30 @@ static void* pool_mmap(u64 bytes) {
  }
 
  // The machine stack of each thread; -D BEND_STACK_BYTES=... changes it.
@@ -149,18 +163,22 @@ index df6d538..4a7ecdd 100644
 +// WL_ROOM stops a segment's frame at stk_end. A task's entry (FID_ENTER,
 +// FID_EXIT's WL_FRAME and WL_ARGS) pushes unchecked, but from the stack's
 +// base and at most 3 + 247 words (WIDE), so it fits the 16 KiB past
-+// stk_end whatever BEND_STACK_BYTES is. One worker, so one stack.
++// stk_end whatever BEND_STACK_BYTES is. One worker, so one stack, taken
++// once per instance (io_loop, or bend_init, which refuses a second call):
++// static storage, which needs no zeroing (unlike Emscripten's mmap, a
++// memalign and a memset) and stays out of resident memory until used.
++static char pool_stack_bss[BEND_STACK_BYTES + 16384]
++  __attribute__((aligned(16384)));
++
 +static Term* pool_stack(void) {
-+  u64   len = BEND_STACK_BYTES;
-+  char* p   = pool_mmap(len + 16384);
-+  stk_end   = (Term*)(p + len);
-+  return (Term*)p;
++  stk_end = (Term*)(pool_stack_bss + BEND_STACK_BYTES);
++  return (Term*)pool_stack_bss;
 +}
 +#else
  static Term* pool_stack(void) {
    u64   len = BEND_STACK_BYTES;
    char* p   = pool_mmap(len + 16384 + SIGSTKSZ);
-@@ -4695,6 +4734,7 @@ static Term* pool_stack(void) {
+@@ -4695,6 +4738,7 @@ static Term* pool_stack(void) {
    sigaction(SIGBUS, &sa, NULL);
    return (Term*)p;
  }
@@ -168,7 +186,7 @@ index df6d538..4a7ecdd 100644
 
  // A wait yields a while before it sleeps, so a turn that ends (or follows)
  // within microseconds never pays a condvar wake.
-@@ -5186,7 +5226,12 @@ static void cube_run(u64* H, bool gpu) {
+@@ -5186,11 +5230,32 @@ static void cube_run(u64* H, bool gpu) {
 
  static u64 corpus_size;
 
@@ -182,7 +200,35 @@ index df6d538..4a7ecdd 100644
  #ifndef BEND_CORPUS_BYTES
  #define BEND_CORPUS_BYTES (1ull << 33)
  #endif
-@@ -5231,6 +5276,11 @@ static void corpus_lay(u64* H, u64 size) {
+
++#if defined(__EMSCRIPTEN__)
++// The corpus is static storage, not mmap (memalign and a memset of the
++// whole corpus): wasm memory is zero at instantiation, wasm-ld writes no
++// data for .bss, and the runtime needs zeros only in the header [0,
++// ALC_OFF) and the rings' get/put words. It is used once per instance
++// (bend_init refuses a second call, corpus_grow fails), and the glue's
++// reset() makes a new instance, so it is never reused.
++static u64 corpus_bss[BEND_CORPUS_BYTES / 8] __attribute__((aligned(65536)));
++
++static void* corpus_map(u64 size) {
++  if (size > sizeof(corpus_bss)) {
++    err_fail("reservation failed");
++  }
++  return corpus_bss;
++}
++#else
+ static void* corpus_map(u64 size) {
+   u64   hint = 1ull << 45;
+   void* p    = MAP_FAILED;
+@@ -5216,6 +5281,7 @@ static void* corpus_map(u64 size) {
+   }
+   return p;
+ }
++#endif
+
+ static void corpus_lay(u64* H, u64 size) {
+   u64 span = size / 8;
+@@ -5236,6 +5302,11 @@ static void corpus_lay(u64* H, u64 size) {
  }
 
  static bool corpus_grow(u64* H, u64 need) {
@@ -194,7 +240,7 @@ index df6d538..4a7ecdd 100644
    bool ok = true;
    LOCK(bank_lock);
    while (ok && need > a32_load(a32_at(H, H_CAP))) {
-@@ -5384,6 +5434,10 @@ OUTLINE void* io_mem(void* mem) {
+@@ -5389,6 +5460,10 @@ OUTLINE void* io_mem(void* mem) {
  }
 
  static int io_sys_addr(const char* host, u32 port, struct sockaddr_in* at) {
@@ -205,7 +251,7 @@ index df6d538..4a7ecdd 100644
    memset(at, 0, sizeof(*at));
    at->sin_family = AF_INET;
    at->sin_port   = htons((uint16_t)port);
-@@ -5453,6 +5507,12 @@ static void io_park_add(IoWork* w) {
+@@ -5458,6 +5533,12 @@ static void io_park_add(IoWork* w) {
  }
 
  static Term io_wait_on(IoWork* w, int fd, short evts, u64 time, IoPack more) {
@@ -218,7 +264,7 @@ index df6d538..4a7ecdd 100644
    w->word = (u32)fd;
    w->pack = more;
    w->time = time;
-@@ -5644,6 +5704,12 @@ static void* io_help(void* arg) {
+@@ -5649,6 +5730,12 @@ static void* io_help(void* arg) {
  }
 
  static Term io_work(IoWork* w, IoCall call, IoPack pack) {
@@ -231,7 +277,7 @@ index df6d538..4a7ecdd 100644
    w->call  = call;
    w->pack  = pack;
    io_busy += 1;
-@@ -6000,6 +6066,13 @@ int main(int argc, char** argv) {
+@@ -6005,6 +6092,13 @@ int main(int argc, char** argv) {
        io_argv[io_argc++] = argv[i];
      }
    }

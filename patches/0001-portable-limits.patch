@@ -11,9 +11,16 @@ Portable limits in the C runtime template (bend2/comp.ts), unguarded; on
   the address space" when it exceeds the target's size_t, instead of
   truncating silently (on wasm32 the 8 GiB corpus became a 0-byte map and
   the runtime then wrote past it).
-- corpus_map: when every address-hinted mmap fails, try once more with
+- corpus_map: try the address hints (2^45, halving) only when they fit a
+  pointer (hint <= UINTPTR_MAX). On 32-bit pointers (wasm32) the cast
+  truncated the hints 2^45 to 2^32 to NULL; mmap(NULL) then succeeded
+  away from the hint, and the loop unmapped and halved: 14 maps (and
+  under Emscripten 14 memsets) of the whole corpus before the last one.
+  When no hint fits or every hinted mmap fails, try once more with
   mmap(NULL, ...) before "reservation failed"; Emscripten's mmap refuses
-  every hint with EINVAL. In-place growth (corpus_grow) is unchanged.
+  every hint below 2^32 with EINVAL. On 64-bit pointers the hints, their
+  order and the result are as before. In-place growth (corpus_grow) is
+  unchanged.
 
 With this patch -Wshorten-64-to-32 reports no narrowing to size_t in the
 emitted C. The remaining warnings are u64 to u32 narrowings (a32_fadd's
@@ -27,7 +34,7 @@ checked against size_t, and whose corpus placement does not need an
 address hint (https://github.com/bendlang/bend/issues/1598).
 
 diff --git a/bend2/comp.ts b/bend2/comp.ts
-index 74cd52b..df6d538 100644
+index 74cd52b..5a869ac 100644
 --- a/bend2/comp.ts
 +++ b/bend2/comp.ts
 @@ -3692,6 +3692,15 @@ static void err_trap(int sig) {
@@ -70,7 +77,7 @@ index 74cd52b..df6d538 100644
    char* p   = pool_mmap(len + 16384 + SIGSTKSZ);
    if (mprotect(p + len, 16384, PROT_NONE) != 0) {
      err_fail("stack guard failed");
-@@ -5172,16 +5186,26 @@ static void cube_run(u64* H, bool gpu) {
+@@ -5172,15 +5186,30 @@ static void cube_run(u64* H, bool gpu) {
 
  static u64 corpus_size;
 
@@ -81,24 +88,33 @@ index 74cd52b..df6d538 100644
 +
  static void* corpus_map(u64 size) {
    u64   hint = 1ull << 45;
-   void* p    = pool_try((void*)hint, size);
-   while (p != (void*)hint && hint > size) {
-     if (p != MAP_FAILED) {
+-  void* p    = pool_try((void*)hint, size);
+-  while (p != (void*)hint && hint > size) {
+-    if (p != MAP_FAILED) {
 -      munmap(p, size);
-+      munmap(p, size_fit(size));
++  void* p    = MAP_FAILED;
++  // A hint past the pointer width would truncate (to NULL on 32-bit
++  // pointers, which mmap takes as no hint), so it is tried only if it fits.
++  if (hint <= UINTPTR_MAX) {
++    p = pool_try((void*)hint, size);
++    while (p != (void*)hint && hint > size) {
++      if (p != MAP_FAILED) {
++        munmap(p, size_fit(size));
++      }
++      hint /= 2;
++      p     = pool_try((void*)hint, size);
      }
-     hint /= 2;
-     p     = pool_try((void*)hint, size);
-   }
-+  // Where no hint is honoured (Emscripten's mmap refuses every one), the
-+  // corpus goes wherever the system puts it.
+-    hint /= 2;
+-    p     = pool_try((void*)hint, size);
++  }
++  // Where no hint fits or is honoured (Emscripten's mmap refuses every one
++  // below 2^32), the corpus goes wherever the system puts it.
 +  if (p == MAP_FAILED) {
 +    p = pool_try(NULL, size);
-+  }
+   }
    if (p == MAP_FAILED) {
      err_fail("reservation failed");
-   }
-@@ -5218,7 +5242,7 @@ static bool corpus_grow(u64* H, u64 need) {
+@@ -5218,7 +5247,7 @@ static bool corpus_grow(u64* H, u64 need) {
      if (ok) {
        corpus_lay(H, more * 2);
      } else if (got != MAP_FAILED) {
@@ -107,7 +123,7 @@ index 74cd52b..df6d538 100644
      }
    }
    UNLOCK(bank_lock);
-@@ -5228,7 +5252,7 @@ static bool corpus_grow(u64* H, u64 need) {
+@@ -5228,7 +5257,7 @@ static bool corpus_grow(u64* H, u64 need) {
  static u64* corpus_setup(bool gpu, long threads, u64 bytes) {
    io_gpu     = gpu;
    KEEP_WORDS = gpu ? CHUNK : CAP_WORDS;
@@ -116,7 +132,7 @@ index 74cd52b..df6d538 100644
    u64 size   = (gpu && bytes != 0 ? bytes : dflt) & ~16383ull;
    CORPUS     = gpu ? gpu_map(size) : corpus_map(size);
    u64* H     = CORPUS;
-@@ -5438,7 +5462,7 @@ static Term io_wait_on(IoWork* w, int fd, short evts, u64 time, IoPack more) {
+@@ -5438,7 +5467,7 @@ static Term io_wait_on(IoWork* w, int fd, short evts, u64 time, IoPack more) {
  }
 
  OUTLINE void io_out(FILE* h, const char* data, u64 len) {
@@ -125,7 +141,7 @@ index 74cd52b..df6d538 100644
      err_fail("a short write on a standard stream");
    }
  }
-@@ -5465,13 +5489,13 @@ OUTLINE char* io_cbuf(Env e, Term s, u64* len, u64 cons) {
+@@ -5465,13 +5494,13 @@ OUTLINE char* io_cbuf(Env e, Term s, u64* len, u64 cons) {
    u64   cap = 64;
    u64   n   = 0;
    u64   bad = 0;
@@ -141,7 +157,7 @@ index 74cd52b..df6d538 100644
      }
      if (cons == CID(SCon)) {
        n += io_utf8(buf + n, fb[0]);
-@@ -5663,7 +5687,7 @@ static void io_wait(Env e, bool block) {
+@@ -5663,7 +5692,7 @@ static void io_wait(Env e, bool block) {
      }
    }
    u64 len = (u64)top / 64 * 8 + 8;
@@ -150,7 +166,7 @@ index 74cd52b..df6d538 100644
    set[1] = set[0] + len;
    io_bit(set[0], io_wake_fd[0], true);
    for (IoWork* a = io_park; a != NULL;
-@@ -5681,7 +5705,7 @@ static void io_wait(Env e, bool block) {
+@@ -5681,7 +5710,7 @@ static void io_wait(Env e, bool block) {
      if (errno != EINTR) {
        err_fail("the poller failed");
      }
