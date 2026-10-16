@@ -14,6 +14,11 @@ Plan and context: `docs/plan.md`.
   in patch 0002, other targets' text unchanged; (3) the stale "528 MB" in
   `glue/README.md` (about line 97) and `tests/differential/README.md`
   (about line 26).
+- [ ] Follow-up of t-ouy36at5 (run r-tegfqq6m left `probe/run.sh` red): [t-fjpg2odo]
+  update `probe/exhaust.bend`'s `# probe-expect:` line (line 7) to the new
+  wasm message `bend: out of memory: the corpus of 1425408 bytes is full;
+  build with a bigger -DBEND_CORPUS_BYTES=...`, and the old message text in
+  `docs/probe.md`; `probe/run.sh` exits 0 again.
 - [ ] Memory measurement in the benchmark: report [t-2lsz77ug]
   `WebAssembly.Memory.buffer.byteLength`, `measureUserAgentSpecificMemory`
   and the renderer process's resident footprint from the OS (macOS), each
