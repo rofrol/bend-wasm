@@ -73,18 +73,6 @@ Plan and context: `docs/plan.md`.
   words); Windows x64 also passes 16-byte structs indirectly and may hit
   the same, unchecked.
 
-- [ ] Requested by the user 2026-10-16: "what about making Bend's compiler [t-x3r2hv5u]
-  in Bend, and restoring the previous code from a wasm file it is built
-  into, with a small compiler in C, as Zig does; then it could be
-  rebuildable like Guix and Debian; ask the models". Facts checked by the
-  coordinator (GitHub API, ziglang/zig): `stage1/zig1.wasm` (3.2 MB) is
-  committed with `stage1/wasm2c.c` (122 KB) and `stage1/wasi.c`;
-  `bootstrap.c` builds wasm2c with the system C compiler, translates
-  zig1.wasm to zig1.c, builds zig1, which compiles the compiler's source to
-  zig2.c (C backend), then builds zig2. Bend 2.0.35's compiler is
-  TypeScript on Bun (DECISIONS.md, "Bend's compiler in TypeScript"). The
-  compiler is upstream's. Answer decided after a consult round; recorded
-  here.
 - [ ] Requested by the user 2026-10-16: "bring in that loop as work to do, [t-ayhexs3c]
   the one from the fast-code-llm space; ask the models": an autoresearch
   loop like fast-code-llm's (`~/personal_projects/fast-code-llm/loop/`,
@@ -141,3 +129,14 @@ Plan and context: `docs/plan.md`.
 ## Needs a decision
 
 ## Proposed
+- [ ] Check whether Bend's TypeScript compiler (bundled into one JS file) [t-xz35srdq]
+  runs on QuickJS, a small C JavaScript engine Debian and Guix build from
+  source: a bootstrappable path without Bun today (argon, consult round
+  `20261016-194939-a5a8`). Needs QuickJS fetched and pinned by the
+  coordinator; one worker item; result: works, or the missing features.
+- [ ] Propose upstream (https://github.com/bendlang/bend) a bounded [t-xlf2fzal]
+  self-hosting experiment: Bend's lexer and parser and one emitter subset
+  written in Bend, benchmarked against the TypeScript compiler, a list of
+  missing runtime and library features, and a two-generation fixpoint
+  (wonder, same round); the coordinator drafts, the user approves the text
+  before posting.

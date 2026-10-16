@@ -440,3 +440,28 @@ instead of a fixed `INITIAL_MEMORY`. Node, Robokill: linear memory
 the replay (bare Node 42.3); `bend_init` 0.10-0.40 ms. New boundary probes
 (deep/deep-fit, exhaust/exhaust-fit, forks, rings driver). Open points:
 t-ouy36at5.
+
+## Bend self-hosting and a wasm bootstrap seed
+
+Requested by the user 2026-10-16: "what about making Bend's compiler
+in Bend, and restoring the previous code from a wasm file it is built
+into, with a small compiler in C, as Zig does; then it could be
+rebuildable like Guix and Debian; ask the models". Facts checked by the
+coordinator (GitHub API, ziglang/zig): `stage1/zig1.wasm` (3.2 MB) is
+committed with `stage1/wasm2c.c` (122 KB) and `stage1/wasi.c`;
+`bootstrap.c` builds wasm2c with the system C compiler, translates
+zig1.wasm to zig1.c, builds zig1, which compiles the compiler's source to
+zig2.c (C backend), then builds zig2. Bend 2.0.35's compiler is
+TypeScript on Bun (DECISIONS.md, "Bend's compiler in TypeScript"). The
+compiler is upstream's. Decided by the coordinator after consult round `20261016-194939-a5a8`
+(sol, mimo, deepseek, argon, wonder, agreeing): not bend-wasm's work.
+Self-hosting is an upstream language project (parser, module loader,
+type and proof checker, emitters, I/O, data structures; estimated months
+to a year; interaction nets suit a sequential, string-heavy compiler
+poorly; argon, wonder). A committed wasm seed gives a portable bootstrap,
+not Guix's full-source bootstrap (Guix packages Zig through a source chain
+from its older C++ implementation instead of `zig1.wasm`, per sol and
+argon; not verified by the coordinator) and not Debian source; it can be
+reproducible if regenerated deterministically. Reproducibility of the
+current build is already an item (TODO, "Build reproducibility"). Two proposals came out of
+the round (TODO, Proposed).
