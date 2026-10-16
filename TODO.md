@@ -66,6 +66,16 @@ Plan and context: `docs/plan.md`.
   again with each variant's expected result stated; `docs/probe.md` says
   so. Step 1 left `INITIAL_MEMORY` at 528MB (wasm-ld needs 520.5 MiB for the
   static corpus); this step lowers it.
+- [ ] Follow-up of t-fkta2jvt (from run r-55d4hhjj, decided by the [t-ouy36at5]
+  coordinator): (1) `tests/negative/run.sh`'s leak case accepts the
+  runtime's out-of-memory error (`ERR_HEAP`) on wasm as detection (with the
+  sized corpus the mutant exhausts it after 10,000-20,000 steps), and
+  `probe/lib/run.sh` goes back to the default corpus (step 2 gave it
+  16 MiB); (2) under `__EMSCRIPTEN__` the out-of-memory message names
+  `-DBEND_CORPUS_BYTES` instead of `--gpu 8GB` (a flag wasm does not have),
+  in patch 0002, other targets' text unchanged; (3) the stale "528 MB" in
+  `glue/README.md` (about line 97) and `tests/differential/README.md`
+  (about line 26).
 - [ ] Memory measurement in the benchmark: report [t-2lsz77ug]
   `WebAssembly.Memory.buffer.byteLength`, `measureUserAgentSpecificMemory`
   and the renderer process's resident footprint from the OS (macOS), each
