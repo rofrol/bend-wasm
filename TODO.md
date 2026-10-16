@@ -144,15 +144,28 @@ Plan and context: `docs/plan.md`.
   the summary, since verify keeps only the tail.
   Decided by the user 2026-10-16 (d-c2aqguer): approved.
 
-- [ ] QuickJS as a real compile path (from t-xz35srdq, run r-qhxshnds, [t-5wpa6b2x]
-  `docs/quickjs.md`): emitting C works on QuickJS 2026-06-04 for two
-  programs with ~200 lines of std/os shims. To make it a path: run the whole
-  differential corpus through it, size `--stack-size` against the largest
-  program (Robokill needs 4 MiB, the script uses 6M), replace the fake
-  `globalThis.Bun = {}` with a patch that drops `main.ts`'s Bun guard on
-  the emit path, and pin the bundling step (Bun, or esbuild/tsc,
-  untested). Running programs needs `bun:ffi`, which QuickJS lacks.
-  Decided by the user 2026-10-16 (d-y55x4t3z): approved.
+- [ ] Bun-free compile path on Node (replaces the QuickJS compile-path [t-y652tp2u]
+  item; the user, 2026-10-16: running programs on QuickJS failing for lack
+  of `bun:ffi` "is weak, maybe throw QuickJS out; ask the models").
+  Consult round `20261016-221426-c9c3` (sol, mimo, deepseek, argon, wonder):
+  `bun:ffi` only serves the JS lane's in-process IO and is off the
+  bootstrap path (compiler -> C -> cc -> native or wasm); the real wall of
+  the QuickJS path was that Bun still builds its bundle; Node, which Debian
+  and Guix ship, needs no shims (mimo, argon, sol). Checked by the
+  coordinator: Node 24.21.0 runs the patched `bend2/main.ts` directly with
+  `--experimental-transform-types` (two constructor parameter properties,
+  `main.ts:827`, `safe.ts:159`, need transform, not just stripping) and a
+  `globalThis.Bun = {}` stand-in for the guard, and emits C byte identical
+  to Bun's for `nat_native.bend` and Robokill's step library.
+  Work: a patch in the series that lets the emit and native-build commands
+  run without Bun (the guard only where `bun:ffi` or `Bun.*` is needed);
+  a check that emits the whole differential corpus on a pinned Node and
+  requires byte identity with Bun's C; one program built to a native binary
+  under Node and run against its expected output; the Node version pinned
+  and documented. QuickJS stays as the recorded result
+  (`docs/quickjs.md`, `tools/quickjs/`).
+  Decided by the user 2026-10-16 (d-76senvng, superseding d-y55x4t3z):
+  Node instead of QuickJS.
 
 ## Needs a decision
 
