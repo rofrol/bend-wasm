@@ -131,6 +131,13 @@ Plan and context: `docs/plan.md`.
   `--toolchain` prints it; a check emits the C of a few programs twice
   from clean caches (and with the patch series) and requires byte-identical
   output, so ordering or environment inputs in the emitter would show.
+
+- [ ] Type-check the patched compiler (`tsc --noEmit` over the patched [t-dyxn2pn3]
+  `bend2/*.ts`; Bun strips types without checking them, mimo): needs the
+  TypeScript package, a new pinned build dependency fetched by the
+  coordinator; catches type errors our `comp.ts` patches introduce.
+  Decided by the user 2026-10-16 (d-qiadn2fv): yes.
+
 - [ ] Requested by the user 2026-10-16: "when will the freestanding build [t-ouqr25cb]
   on plain clang --target=wasm32 replace emcc? ask the models". Today the
   freestanding item sits after the memory work, the browser-only glue and
@@ -217,7 +224,3 @@ Plan and context: `docs/plan.md`.
 ## Needs a decision
 
 ## Proposed
-- [ ] Type-check the patched compiler (`tsc --noEmit` over the patched [t-dyxn2pn3]
-  `bend2/*.ts`; Bun strips types without checking them, mimo): needs the
-  TypeScript package, a new pinned build dependency fetched by the
-  coordinator; catches type errors our `comp.ts` patches introduce.
