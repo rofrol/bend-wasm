@@ -4,6 +4,17 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
+- [ ] Type-check the patched compiler (`tsc --noEmit` over the patched [t-dyxn2pn3]
+  `bend2/*.ts`; Bun strips types without checking them, mimo): needs the
+  TypeScript package, a new pinned build dependency fetched by the
+  coordinator; catches type errors our `comp.ts` patches introduce.
+  Decided by the user 2026-10-16 (d-qiadn2fv): yes.
+  Fetched by the coordinator 2026-10-16: `~/.cache/bend-wasm/typecheck-ts6.0.3/`
+  (npm, `--ignore-scripts`): typescript 6.0.3 (JS; 7.x is the native Go
+  port with per-platform binaries), bun-types 1.4.2, @types/node 26.6.5,
+  undici-types 8.9.0; package-lock.json sha256 0221bcef1fb8...af86.
+  Worker run r-tqd3miak.
+
 - [ ] Check whether Bend's TypeScript compiler (bundled into one JS file) [t-xz35srdq]
   runs on QuickJS, a small C JavaScript engine Debian and Guix build from
   source: a bootstrappable path without Bun today (argon, consult round
