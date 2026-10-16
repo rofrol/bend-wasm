@@ -1,0 +1,70 @@
+# Programs of the differential test (tests/differential/run.sh), by path in
+# Bend's own tests; README.md says how they were picked. One path per line;
+# `#` starts a comment.
+
+# Arithmetic, words and Nat
+vendor/bend/tests/run/nat_native.bend
+vendor/bend/tests/run/nat_add_infix.bend
+vendor/bend/tests/run/nat_overflow.bend
+vendor/bend/tests/reg/nat_chain.bend
+vendor/bend/tests/reg/nat_table.bend
+vendor/bend/tests/run/word_arithmetic.bend
+vendor/bend/tests/run/word_div_mod.bend
+vendor/bend/tests/run/word_wrap_chains.bend
+vendor/bend/tests/run/word_bitwise_literals.bend
+vendor/bend/tests/run/u32_mod_operator.bend
+vendor/bend/tests/eval/bit_adder.bend
+
+# F32 (compared byte for byte, README.md)
+vendor/bend/tests/run/float_arithmetic.bend
+vendor/bend/tests/run/float_printing.bend
+vendor/bend/tests/run/float_specials.bend
+vendor/bend/tests/run/float_text_roundtrip.bend
+
+# ADT matching and affine frees
+vendor/bend/tests/run/computed_match.bend
+vendor/bend/tests/run/state_machine.bend
+vendor/bend/tests/run/expr_interpreter.bend
+vendor/bend/tests/run/bst_insert.bend
+vendor/bend/tests/run/overuse_clone.bend
+vendor/bend/tests/run/spare_reuse.bend
+vendor/bend/tests/eval/either_suite.bend
+vendor/bend/tests/eval/maybe_ops.bend
+vendor/bend/tests/eval/tuple_suite.bend
+vendor/bend/tests/reg/match_value_literal_arm.bend
+
+# Recursion
+vendor/bend/tests/run/insertion_sort.bend
+vendor/bend/tests/run/sieve_eratosthenes.bend
+vendor/bend/tests/run/binary_search.bend
+vendor/bend/tests/run/fuel_loops.bend
+vendor/bend/tests/eval/deep_thunk_chain.bend
+vendor/bend/tests/run/list_map_fold_ops.bend
+vendor/bend/tests/reg/wnf_deep_chain.bend
+
+# Shared values and reference counts
+vendor/bend/tests/run/flat_copy_share.bend
+vendor/bend/tests/run/fork_shared_flat.bend
+vendor/bend/tests/run/array_fork_unshare.bend
+vendor/bend/tests/run/fn_capture_owns.bend
+vendor/bend/tests/reg/share_tuple_global.bend
+vendor/bend/tests/reg/brw_shared_fields.bend
+vendor/bend/tests/reg/closure_capture_once.bend
+vendor/bend/tests/reg/array_keep_cow.bend
+
+# Strings
+vendor/bend/tests/run/string_algorithms.bend
+vendor/bend/tests/eval/string_escape.bend
+
+# IO, channels and fail-stops (several exit non-zero on purpose)
+vendor/bend/tests/io/hello_print.bend
+vendor/bend/tests/io/do_let_lines.bend
+vendor/bend/tests/io/text_formatting.bend
+vendor/bend/tests/io/chan_close_send.bend
+vendor/bend/tests/io/fiber_single_join.bend
+vendor/bend/tests/io/deadlock.bend
+vendor/bend/tests/io/halt_utf8_law.bend
+
+# A foreign effect with a C and a JS twin (nat_host_bounds.c/.js)
+vendor/bend/tests/io/nat_host_bounds.bend
+vendor/bend/tests/io/nat_host_neg.bend

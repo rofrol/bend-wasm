@@ -5,3 +5,5 @@
 [checks]
 # An explicit parent-to-head diff also checks merge commits, unlike git show.
 whitespace = ["git", "diff", "--check", "HEAD^", "HEAD"]
+# Native vs JS lane on the corpus of tests/differential/corpus.txt (README there).
+differential = ["sh", "tests/differential/run.sh"]

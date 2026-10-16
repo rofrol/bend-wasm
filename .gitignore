@@ -4,3 +4,5 @@
 *.md.lock
 # Generated C and build outputs of probe/run.sh
 probe/out/
+# Builds and outputs of tests/differential/run.sh
+tests/differential/out/
