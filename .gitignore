@@ -2,3 +2,5 @@
 .cache/
 # Locks herdr's TODO editor leaves beside TODO.md
 *.md.lock
+# Generated C and build outputs of probe/run.sh
+probe/out/
