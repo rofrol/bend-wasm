@@ -104,3 +104,11 @@ The program stays excluded from the harness until upstream answers.
 Done 2026-10-16 (run r-rzcz45w7): `docs/decisions/0001-wasm-through-a-patched-emitter.md`;
 `docs/plan.md` "Known facts" corrected (no tracing GC, affine frees and
 refcounts, F32 arrays as contiguous u32 blocks).
+
+## Patch series infrastructure (t-u66qb3n7)
+
+Done 2026-10-16 (run r-qjv263ne): `patches/NNNN-*.patch` (unified diffs
+with a "Retired by:" header) go on a cached copy of the pin,
+`.toolchain/<pin>-<series hash>`, published by rename; `BEND_PATCH=0` runs
+the pin; `scripts/check-patches` is the herdr check `patches`. Convention in
+`patches/README.md` and `docs/workflow.md`.

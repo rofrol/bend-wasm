@@ -4,12 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Patch series infrastructure: `patches/NNNN-*.patch` applied by [t-u66qb3n7]
-  `scripts/bend` to a cached copy of the pin, published by rename (as
-  herdr-bend's `scripts/bend` and `toolchain-patch.py` do), `BEND_PATCH=0`
-  runs the pin; a check that the series applies cleanly to exactly the
-  pinned commit; each patch's header names the upstream change that retires
-  it; documented in `docs/workflow.md`.
 - [ ] Patch 0001, portable limits (unguarded, upstreamable): `SIZE_MAX` [t-sljw6rhm]
   checks on every u64-to-size_t length, `mmap(NULL)` when the hinted
   mapping fails, compile-time knobs for corpus and stack size with today's
