@@ -20,8 +20,25 @@ Plan and context: `docs/plan.md`.
   rounded up to a power of two), not guessed, and the patch header states
   the arithmetic; memory growth stays off, with `INITIAL_MEMORY` sized to
   hold it.
+- [ ] Follow-up of t-h3ak74p5 (patch 0002 hardening, from run r-t3hzaln6): [t-cqjfh5mc]
+  (1) audit every Term-stack push in the runtime under Emscripten and show
+  each is covered by `WL_ROOM` or the documented 16 KiB slack past
+  `stk_end` (natively the guard page covers all of them), with a probe
+  program per uncovered kind of push if any; (2) `IO.random_u32` does not
+  compile under Emscripten (`getrandom` undeclared, `sys/random.h` only on
+  Linux): make it work (e.g. `getentropy`) or fail loudly; (3) check that
+  `Process.run` fails loudly on wasm. Decided by the coordinator
+  2026-10-16: the wasm stack default stays 8 MiB (the corpus does not
+  bound it from below; deeper recursion fails with ERR_DEEP, as on the JS
+  lane), overridable with `-DBEND_STACK_BYTES`.
 - [ ] Wasm lane in the differential harness (wasm32, `-mtail-call`, fixed [t-tidzr2vk]
   memory); every non-excluded program matches native byte for byte.
+  Known from run r-t3hzaln6: with patches 0001 and 0002, 48 of 51 match on
+  wasm32; `reg/nat_chain` and `run/bst_insert` run out of memory and
+  `run/string_algorithms` overflows the stack on wasm32 and wasm64, also
+  with a 1 GiB corpus or a 256 MiB stack, while the same C built natively
+  with `-D__EMSCRIPTEN__` is correct: find the cause (a wasm-only runtime
+  bug, not a size), never exclude them for being slow or big.
 - [ ] Browser check: the pure probe program runs in a page without [t-2zouc2um]
   cross-origin isolation (single worker, no pthreads) with output identical
   to native; record the browsers tried (tail calls are an engine feature).
