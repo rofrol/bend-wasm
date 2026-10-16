@@ -47,17 +47,6 @@ Plan and context: `docs/plan.md`.
   zeroes) and emitting wasm directly from Bend like Zig's own backend (a
   new compiler backend, orthogonal to the memory bug, no upstream chance).
   Next after the memory work: the freestanding build item below.
-- [ ] Audit for a CPU-sized wasm layout (read-only, a report in [t-ap3q3hvo]
-  `docs/memory.md`): every use of `CUBE`, `CUBE_T`, `CUBE_LOG`, `LANES`,
-  `RING_*`, `STAK_*`, `ALC_OFF`, `STAT_*`, `HEAP_OFF` on the CPU path of the
-  pinned `comp.ts` with patches 0001-0003: masks and shifts, lane indexing
-  by worker vs by task, whether one worker touches more than one lane's
-  areas, the ring sentinel words, the meaning of `+ 10` and `> CUBE` in
-  `corpus_lay`, whether any layout offset can reach observable output or
-  hashes, the zeroing assumptions (`mmap` fresh-zero) on init and reset,
-  and how much of the corpus a run actually touches (measure). End with
-  the smallest patch shape for (a) a CPU-sized layout or (e) a split heap,
-  and (b) a corpus without Emscripten's memset, with risks; no code change.
 - [ ] Wasm memory, step 1 (decided by the coordinator from the audit [t-uyjzq4hq]
   `docs/memory.md`, run r-clpmphs4): fix patch 0001's corpus placement on
   32-bit pointers (on wasm32 `(void*)hint` truncates hints 2^45..2^32 to

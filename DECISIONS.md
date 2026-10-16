@@ -287,3 +287,16 @@ No leftover process (checked by the coordinator).
 
 2026-10-16, again (d-k4topq5i): 12.8 GiB free stopped the audit; the user
 freed space (25 GiB free).
+
+## Memory layout audit (t-ap3q3hvo)
+
+Done 2026-10-16 (run r-clpmphs4): `docs/memory.md`. On the host the ALC
+rows and Term stacks of the corpus are device-only; rings serve only `!`
+fork programs; layout offsets never reach output or hashes (Robokill's hash
+equal under five layouts); only the header and ring counters need zero;
+runs touch under 0.4 MiB of the corpus. Found a bug in patch 0001: on
+wasm32 the address hints truncate to NULL, so `bend_init` maps and zeroes
+512 MiB 14 times (verified by the coordinator). A `.bss` corpus prototype
+cut Node RSS from 573 to 53 MiB and `bend_init` from 140 to 0 ms. The
+memory patch is split into steps 1 and 2 accordingly (t-uyjzq4hq,
+t-fkta2jvt).
