@@ -4,7 +4,7 @@
 # out-of-memory error (ERR_HEAP), not a trap or a wrong sum.
 # probe/exhaust-fit.bend is one cell shorter, the longest that fits. The
 # native corpus (8 GiB, grown in place) holds it and prints 77825.
-# probe-expect: bend: out of memory: run again with a bigger span, as in --gpu 8GB
+# probe-expect: bend: out of memory: the corpus of 1425408 bytes is full; build with a bigger -DBEND_CORPUS_BYTES=...
 import Base
 
 def build(n: Nat, acc: List<U32>) -> List<U32>:

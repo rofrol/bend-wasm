@@ -318,7 +318,7 @@ The step's tests (`docs/memory.md`, "After step 2"), all on
 | `deep-fit.bend` | 1,048,571 one-word frames, the deepest the 8 MiB Term stack holds | matches native |
 | `deep.bend` | one frame more | `bend: memory fault (machine stack overflow?)` |
 | `exhaust-fit.bend` | a list of 77,824 U32, the longest the default corpus holds | matches native |
-| `exhaust.bend` | one cell more | `bend: out of memory: ...` |
+| `exhaust.bend` | one cell more | `bend: out of memory: the corpus of 1425408 bytes is full; build with a bigger -DBEND_CORPUS_BYTES=...` |
 | `rings.c` (driver of `forks`) | the top ring (16383) ends the ring area; 1,024 pushes fit it without touching the static image, push 1,025 posts `ERR_RING` | native and wasm print the same lines, exit 1, `bend: runtime fail-stop` |
 
 A Bend program cannot fill a ring on one worker (`forks.bend` pushes 510
