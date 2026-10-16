@@ -47,19 +47,6 @@ Plan and context: `docs/plan.md`.
   zeroes) and emitting wasm directly from Bend like Zig's own backend (a
   new compiler backend, orthogonal to the memory bug, no upstream chance).
   Next after the memory work: the freestanding build item below.
-- [ ] Wasm memory, step 1 (decided by the coordinator from the audit [t-uyjzq4hq]
-  `docs/memory.md`, run r-clpmphs4): fix patch 0001's corpus placement on
-  32-bit pointers (on wasm32 `(void*)hint` truncates hints 2^45..2^32 to
-  NULL, `mmap(NULL)` succeeds, the loop unmaps and halves: 14 maps and
-  memsets of 512 MiB in `bend_init`, about 140 ms; checked by the
-  coordinator in the patched `comp.ts` 5621-5640): try a hint only when it
-  fits a pointer; and under `__EMSCRIPTEN__` take the corpus and the Term
-  stack from static zeroed storage (`.bss`, no `mmap`, no memset), as the
-  audit's prototype did (Node RSS after the replay 573 to 53 MiB,
-  `bend_init` 140 to 0 ms, hash unchanged). Only the header `[0, ALC_OFF)`
-  and the ring get/put counters need zero (audit: garbage elsewhere gives
-  identical output). Gates: differential, negative, replay, heap bound;
-  Node RSS and `bend_init` time reported (replaces t-xes4fk35).
 - [ ] Wasm memory, step 2 (from the same audit): under `__EMSCRIPTEN__` a [t-fkta2jvt]
   host layout without the device-only areas (ALC rows 8 MiB, Term stacks
   256 MiB; the host keeps `ALC[w]` static and stacks in `pool_stack`),

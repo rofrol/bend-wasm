@@ -300,3 +300,15 @@ wasm32 the address hints truncate to NULL, so `bend_init` maps and zeroes
 cut Node RSS from 573 to 53 MiB and `bend_init` from 140 to 0 ms. The
 memory patch is split into steps 1 and 2 accordingly (t-uyjzq4hq,
 t-fkta2jvt).
+
+## Wasm memory step 1 (t-uyjzq4hq)
+
+Done 2026-10-16 (run r-epvs73bi): patch 0001's `corpus_map` tries a hint
+only when it fits a pointer (`hint <= UINTPTR_MAX`); under Emscripten
+patch 0002 takes the corpus and the Term stack from zeroed static storage
+(`.bss`), no `mmap`, no memset. Node, Robokill through the glue: RSS after
+init about 568 to 48 MiB (bare Node 43.5), after the replay 313-578 to
+51-58 MiB, `bend_init` 152-250 ms to 0.1-0.5 ms; linear memory unchanged
+(553,648,128 bytes, `INITIAL_MEMORY` 528MB, 520.5 MiB needed). All gates
+pass. `probe/run.sh`'s growth variants no longer link; fixed in step 2
+(t-fkta2jvt).
