@@ -117,6 +117,27 @@ Plan and context: `docs/plan.md`.
   recording dump and terminating." Seen on run r-mqzurb3s's tree, which
   does not touch `probe/`; find the cause (Rule 10: no longer timeout, no
   retry) and fix it so the check passes.
+  Decided by the coordinator after consult round `20261016-211147-4d29`
+  (sol, mimo, argon, wonder; deepseek failed): the "allocator multiple
+  times" line is noise (it is on passing runs too); the Playwright Chrome
+  started at 21:09 cannot be the trigger (failures began about 21:04); a
+  watchdog-disabling flag, a longer timeout, a retry and accepting exit 2
+  are rejected. Reproduced by the coordinator on `about:blank` (3 of 3,
+  21:07-21:09), then not at all: a diagnostic loop of 20 full-Chrome and 20
+  headless-shell runs at load about 54 all exited 0 (herdr job
+  20261016-211539-7744); the cause stays unproven (a Playwright Chrome of
+  the same app bundle crashed at 21:06 and 20:52, Crashpad dumps). Fix:
+  `probe/web/run.sh` uses Chrome for Testing's chrome-headless-shell,
+  pinned, a separate binary built for `--dump-dom` with a lighter teardown
+  and no state shared with the user's Chrome. The coordinator fetched
+  155.0.8059.84 mac-arm64 (zip sha256
+  7f111980bcb41e908d0fa3e969a625e7777ff683c1fc43fd7759d05ec3ffe52b) into
+  `~/.cache/bend-wasm/chrome-headless-shell-155.0.8059.84/`; with it
+  `probe/web/run.sh` passes (hello, arith). The worker makes it the
+  default (CHROME still overrides), documents the fetch and the pin in
+  `docs/workflow.md` and `docs/probe.md`, and adds negative pages (a
+  program that fails, a page that never runs it) that the coordinator runs
+  outside the sandbox to show the check still fails.
 
 ## Needs a decision
 
