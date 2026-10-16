@@ -204,3 +204,18 @@ checkpoint on, natively and in wasm, with peeks equal to `main`; a
 deliberate leak raises it by 12,288 words per 1,000 calls, so the meter
 sees leaks. Ordinary programs emit byte-identical C (58 checked). Open
 points went to t-byai25qu and t-2czhzqqy.
+
+## Negative checks (t-oh4vht3i)
+
+Done 2026-10-16 (run r-xg35kc6g): `tests/negative/run.sh` (herdr check
+`negative`, about 2.5 min) applies mutants through `BEND_PATCH_EXTRA` (added
+to the series and its hash, `patches/` untouched) and requires each to
+fail for its reason: a per-step leak (high-water 94,336 to 815,232 words;
+`probe/lib/run.sh` now fails when the last checkpoint exceeds the first),
+a stale handle (clear error natively and in wasm; with liveness checks
+removed the misuse test fails), the `Env` two-word fix reverted (exactly
+the three programs fail on wasm), a missing lane (`LANES`, default
+`js wasm`, a listed lane that cannot build fails the run; pin-only runs use
+`BEND_PATCH=0 LANES=js`). The 5 s hang guard in `probe/lib/run.sh` was
+agreed by the coordinator: test tooling, measured drivers 0.01 s native and
+0.21 s wasm, same bound as the harness; no orphaned process left (checked).

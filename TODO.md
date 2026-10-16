@@ -4,17 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Negative checks (decided by the coordinator 2026-10-16 after consult [t-oh4vht3i]
-  round `20261016-145116-5f6f`, under the user's d-pzyv4252 "ask the
-  models"; narrowed from the fast-code-llm session's mutation seeds): the
-  harness and library-mode checks must fail on (1) a mutant library build
-  that leaks one term per step (the 100,000-call bound must trip), (2) reuse
-  of a consumed or disposed handle (a clear error, never corruption), (3)
-  patch 0002's `Env` fix reverted (the wasm lane must report the three
-  programs), (4) an expected lane missing: today `BEND_PATCH=0` makes the
-  wasm lane "not available" and the run still exits 0; a lane that should
-  exist must fail the run. Mutants live as small patch files under
-  `tests/negative/`, applied only by that check; no mutation framework.
 - [ ] Robokill headless replay in wasm: `spike/step.bend` of Robokill [t-byai25qu]
   (read-only, `63031ab`) through library mode; state hashes and `render`
   bytes equal native at every checkpoint of its 10,000-frame replays for
