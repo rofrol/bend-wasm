@@ -93,3 +93,8 @@ Hang guard 5 s, as Bend's own gate for the same programs
 `tests/differential/README.md`. Finding: `tests/io/process_run.bend`
 differs on the JS lane (reproduced outside the sandbox by the coordinator);
 the upstream report is item t-gdvytox3.
+
+## process_run JS-lane report (t-gdvytox3)
+
+Posted 2026-10-16 after the user approved the text (d-vz6pvgnd): https://github.com/bendlang/bend/issues/1599.
+The program stays excluded from the harness until upstream answers.
