@@ -79,6 +79,16 @@ Plan and context: `docs/plan.md`.
   (differential wasm lane, replay, glue tests, Node benchmark); a bare
   Node process is 43.5 MiB of the 48 MiB RSS measured after memory step 1.
   Answer and any change decided after a consult round; recorded here.
+- [ ] Requested by the user 2026-10-16: "rather weak that Bend's compiler [t-zissmshz]
+  is TypeScript on Node? ask the models". Facts checked by the
+  coordinator: Bend 2.0.35's compiler is TypeScript (`bend2/*.ts`, about
+  12,700 lines) run by Bun (`#!/usr/bin/env bun`; our pin 1.4.2), not
+  Node; `main.ts` is also a Bun plugin and a Node import hook for
+  `import x from "./x.bend"`; upstream ships its release `bend` binary
+  built with `bun build --compile` (CHANGELOG, #1025); no self-hosting plan
+  found in its README, CHANGELOG or WONTFIX. The compiler is upstream's;
+  bend-wasm only pins it. Answer and any change decided after a consult
+  round; recorded here.
 - [ ] Freestanding wasm build beside Emscripten (from the Zig request, [t-nt66wuif]
   consult round `20261016-175818-a3e6`), after the memory patch and its
   measurement: first `-sSTANDALONE_WASM --no-entry` with Emscripten's own
