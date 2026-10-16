@@ -15,11 +15,6 @@ Plan and context: `docs/plan.md`.
 - [ ] Differential test harness: one script builds a corpus native, JS lane and [t-ucc65gif]
   wasm and diffs stdout and exit code; start with at least 20 deterministic
   programs from Bend's own tests; list exclusions with reasons.
-- [ ] Follow-up of t-3fa5ws5p: say in `docs/workflow.md` that herdr's worker [t-yposk2fd]
-  folder (`../herdr-worktrees/bend-wasm/worker`) has no `vendor/bend`
-  checkout until the coordinator runs `git submodule update --init --depth 1
-  vendor/bend` there (workers have no network; run r-x6alm2ho attempt 1
-  stopped on it), and that a pin move needs the same in that folder.
 
 ## Needs a decision
 

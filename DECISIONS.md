@@ -30,3 +30,9 @@ classified there (1 and 9 shim-able by flags, 2 to 4 emitter changes, 5 to
 8 architectural for a browser page); 5 to 9 come from reading the code, not
 from runs. The coordinator checked the `comp.ts` and Emscripten lines.
 Whether to patch `comp.ts` goes back to the user (t-3oqripea).
+
+## Worker folder checkout note (t-yposk2fd)
+
+Done 2026-10-16 (run r-6ec5gs2q): `docs/workflow.md` says the coordinator
+checks out `vendor/bend` in herdr's worker folder before dispatch and after a
+pin move, since workers have no network.
