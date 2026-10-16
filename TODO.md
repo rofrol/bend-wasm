@@ -71,6 +71,14 @@ Plan and context: `docs/plan.md`.
   and the renderer process's resident footprint from the OS (macOS), each
   after init and after the replay, at events the page posts; compare the
   JS lane; rerun the Chrome benchmark after the memory patch.
+- [ ] Requested by the user 2026-10-16: "do we need Node.js in Bend at [t-msockqr3]
+  all? ask the models." Facts checked by the coordinator: the browser
+  product does not run Node; the Bend compiler runs on Bun 1.4.2; `emcc`
+  needs Node at build time (emsdk's `.emscripten` sets `NODE_JS`; its JS
+  passes run through it); our tests run the wasm in emsdk's Node
+  (differential wasm lane, replay, glue tests, Node benchmark); a bare
+  Node process is 43.5 MiB of the 48 MiB RSS measured after memory step 1.
+  Answer and any change decided after a consult round; recorded here.
 - [ ] Freestanding wasm build beside Emscripten (from the Zig request, [t-nt66wuif]
   consult round `20261016-175818-a3e6`), after the memory patch and its
   measurement: first `-sSTANDALONE_WASM --no-entry` with Emscripten's own
