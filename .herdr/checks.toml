@@ -9,5 +9,7 @@ whitespace = ["git", "diff", "--check", "HEAD^", "HEAD"]
 differential = ["sh", "tests/differential/run.sh"]
 # The Bend patch series applies cleanly to exactly the pinned commit (patches/README.md).
 patches = ["sh", "scripts/check-patches"]
+# tsc over the patched compiler; no errors beyond the pin's own (scripts/typecheck).
+typecheck = ["sh", "scripts/typecheck"]
 # The checks above and probe/lib fail on known-bad builds (tests/negative/README.md).
 negative = ["sh", "tests/negative/run.sh"]

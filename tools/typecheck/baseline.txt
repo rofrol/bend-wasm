@@ -1,0 +1,8 @@
+bend2/bend.ts: TS2339: Property 'k' does not exist on type 'LTerm'.
+bend2/bend.ts: TS2339: Property 'v' does not exist on type 'TLD'.
+bend2/safe.ts: TS2345: Argument of type '(v: HTerm | null) => Cols[]' is not assignable to parameter of type '(this: undefined, value: TermOf<unknown>, index: number, array: TermOf<unknown>[]) => Cols | readonly Cols[]'.
+bend2/safe.ts: TS2345: Argument of type 'TermOf<unknown>' is not assignable to parameter of type 'HTerm'.
+bend2/safe.ts: TS2345: Argument of type 'TermOf<unknown>' is not assignable to parameter of type 'HTerm'.
+bend2/safe.ts: TS2345: Argument of type 'TermOf<unknown>' is not assignable to parameter of type 'HTerm'.
+bend2/safe.ts: TS2345: Argument of type 'TermOf<unknown>[]' is not assignable to parameter of type 'HTerm[]'.
+bend2/safe.ts: TS2345: Argument of type 'TermOf<unknown>[]' is not assignable to parameter of type 'HTerm[]'.

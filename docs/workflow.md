@@ -10,6 +10,7 @@ the general policy in `AGENTS.md`. The plan is `docs/plan.md`.
 | Bend 2 | tag `v2.0.35`, commit `79df8d9c40722ee9507a1e253f283b51025f9d6c` | `vendor/bend`, a shallow submodule of https://github.com/bendlang/bend |
 | Bun | `1.4.2`, build `1.4.2+50a8a8387` (`bun --revision`) | `want_bun` in `scripts/bend` |
 | Emscripten | emsdk tag `6.0.10`, SDK `6.0.10` | `~/.cache/bend-wasm/emsdk-6.0.10`, pinned in `scripts/emcc` |
+| TypeScript (type check only) | `typescript` 6.0.3, `bun-types` 1.4.2, `@types/node` 26.6.5 | `~/.cache/bend-wasm/typecheck-ts6.0.3`, pinned by `tools/typecheck/package-lock.json` |
 
 The emsdk pin is the newest release tag that was at least two weeks old
 when it was chosen (2026-10-16: `6.0.10` is from 2026-09-21, `6.0.11` from
@@ -66,6 +67,15 @@ the pin.
   `vendor/bend` is at the pinned commit, that every patch applies cleanly
   in order to a fresh copy of it, and that every patch has a `Retired by:`
   line; with no patches it prints `no patches`.
+- `scripts/typecheck` (herdr check `typecheck`) runs `tsc --noEmit` over
+  `bend2/*.ts` of the copy `scripts/bend` uses, with the options in
+  `tools/typecheck/tsconfig.json`, on the pinned Bun (Bun strips types
+  without checking them). The pin's own type errors are listed in
+  `tools/typecheck/baseline.txt`; the check fails on any error beyond
+  them, compared by file, code and message, not line. After moving the
+  Bend pin, `scripts/typecheck --baseline` rewrites that list from the
+  unpatched pin; never rewrite it to accept an error a patch adds.
+  `BEND_WASM_TYPECHECK=/path` points to another install of the packages.
 - Moving the Bend pin means rebasing the series onto the new commit, in
   its own commit, with `scripts/check-patches` passing.
 
@@ -77,6 +87,16 @@ git clone --depth 1 --branch 6.0.10 https://github.com/emscripten-core/emsdk "$d
 "$dir/emsdk" install 6.0.10
 "$dir/emsdk" activate 6.0.10
 scripts/emcc --version
+```
+
+The type checker's packages, from the committed lock file (the scripts in
+the packages are not run):
+
+```sh
+dir=~/.cache/bend-wasm/typecheck-ts6.0.3
+mkdir -p "$dir" && cp tools/typecheck/package.json tools/typecheck/package-lock.json "$dir/"
+(cd "$dir" && npm ci --ignore-scripts)
+scripts/typecheck
 ```
 
 ## Moving a pin
@@ -92,3 +112,12 @@ the rerun checks in its message or results:
   `bun --revision` prints, and update the table above.
 - Emscripten: install the new SDK into `~/.cache/bend-wasm/emsdk-<ver>` as
   above, change `want` in `scripts/emcc` and the table above.
+- TypeScript: in a scratch directory, `npm install --save-exact
+  --ignore-scripts typescript@<ver> bun-types@<Bun's version>
+  @types/node@<ver>`; copy its `package.json` and `package-lock.json`
+  into `tools/typecheck/`, install them into
+  `~/.cache/bend-wasm/typecheck-ts<ver>` as above, and update the default
+  of `BEND_WASM_TYPECHECK` in `scripts/typecheck` and the table above.
+  Keep `bun-types` at the pinned Bun's version when Bun moves. A new
+  TypeScript can report other errors in the pin: rewrite the baseline
+  (`scripts/typecheck --baseline`) in the same commit and say why.

@@ -1,0 +1,105 @@
+#!/bin/sh
+# Type-checks the compiler scripts/bend runs: `tsc --noEmit` over bend2/*.ts
+# of the patched copy (.toolchain/<pin>-<series hash>), with the options in
+# tools/typecheck/tsconfig.json. Bun strips types without checking them, so
+# this is what catches a type error a patch introduces.
+#
+# The pinned Bend already has type errors (upstream's own code); they are
+# recorded in tools/typecheck/baseline.txt and the check fails only on
+# errors beyond them. Diagnostics are compared as "file: code: message"
+# (the first line of each), without line and column, which patches shift;
+# as a multiset, so a second copy of a known error counts as new.
+# `scripts/typecheck --baseline` rewrites the baseline from the unpatched
+# pin (after moving the Bend pin; never to accept an error a patch adds).
+#
+# TypeScript runs on the pinned Bun that scripts/bend checks: the one
+# JavaScript runtime this repository already pins, so the check needs no
+# Node. TypeScript and the type packages (versions in
+# tools/typecheck/package-lock.json) are read from BEND_WASM_TYPECHECK,
+# default ~/.cache/bend-wasm/typecheck-ts6.0.3, installed as
+# docs/workflow.md says. BEND_PATCH and BEND_PATCH_EXTRA work as in
+# scripts/bend.
+set -eu
+root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$root"
+deps=${BEND_WASM_TYPECHECK:-$HOME/.cache/bend-wasm/typecheck-ts6.0.3}
+tsc=$deps/node_modules/typescript/lib/tsc.js
+if [ ! -f "$tsc" ] || [ ! -d "$deps/node_modules/bun-types" ]; then
+  echo "scripts/typecheck: no TypeScript in $deps; install it with:" >&2
+  echo "  mkdir -p $deps && cp tools/typecheck/package.json tools/typecheck/package-lock.json $deps/" >&2
+  echo "  (cd $deps && npm ci --ignore-scripts)" >&2
+  exit 1
+fi
+baseline=tools/typecheck/baseline.txt
+if [ "${1:-}" = "--baseline" ]; then
+  BEND_PATCH=0
+  export BEND_PATCH
+fi
+# scripts/bend builds the patched copy, checks Bun and names both: the
+# pin on the "bend" line, the series hash on the "patches" line.
+info=$(scripts/bend --toolchain)
+pin=$(echo "$info" | sed -n 's/^bend [^ ]* //p')
+sum=$(echo "$info" | sed -n 's/^patches: \([0-9a-f]\{16\}\) .*/\1/p')
+if [ -n "$sum" ]; then
+  src=$root/.toolchain/$pin-$sum
+else
+  src=$root/vendor/bend
+fi
+if [ ! -f "$src/bend2/main.ts" ]; then
+  echo "scripts/typecheck: no compiler at $src (scripts/bend --toolchain printed:)" >&2
+  echo "$info" >&2
+  exit 1
+fi
+bun=${BEND_BUN:-$(command -v bun)}
+mkdir -p .toolchain
+tmp=$root/.toolchain/typecheck.$$
+rm -rf "$tmp"
+mkdir "$tmp"
+trap 'rm -rf "$tmp"' EXIT
+trap 'exit 1' HUP INT TERM
+files=$(cd "$src" && for f in bend2/*.ts; do printf '"%s/%s",' "$src" "$f"; done)
+cat > "$tmp/tsconfig.json" <<EOF
+{
+  "extends": "$root/tools/typecheck/tsconfig.json",
+  "compilerOptions": {
+    "typeRoots": ["$deps/node_modules", "$deps/node_modules/@types"]
+  },
+  "files": [${files%,}]
+}
+EOF
+# From inside the copy tsc names files relative to it (bend2/comp.ts).
+# It exits 2 when it reports errors; anything else, or no diagnostics in
+# its output, is a failure of the run itself.
+status=0
+(cd "$src" && "$bun" "$tsc" -p "$tmp/tsconfig.json" --pretty false) > "$tmp/out" 2>&1 || status=$?
+if [ "$status" != 0 ] && { [ "$status" != 2 ] || ! grep -q '): error TS' "$tmp/out"; }; then
+  echo "scripts/typecheck: tsc failed (exit $status):" >&2
+  cat "$tmp/out" >&2
+  exit 1
+fi
+sed -n -e 's/^\([^ (]*\)([0-9]*,[0-9]*): error \(TS[0-9]*\): /\1: \2: /p' \
+  -e 's/^error \(TS[0-9]*\): /-: \1: /p' "$tmp/out" | LC_ALL=C sort > "$tmp/found"
+if [ "${1:-}" = "--baseline" ]; then
+  cp "$tmp/found" "$baseline"
+  echo "scripts/typecheck: wrote $(wc -l < "$baseline" | tr -d ' ') diagnostics of the unpatched pin to $baseline"
+  exit 0
+fi
+LC_ALL=C sort "$baseline" > "$tmp/base"
+LC_ALL=C comm -13 "$tmp/base" "$tmp/found" > "$tmp/new"
+LC_ALL=C comm -23 "$tmp/base" "$tmp/found" > "$tmp/gone"
+if [ -s "$tmp/gone" ]; then
+  echo "scripts/typecheck: baseline errors no longer reported (rewrite the baseline if the pin moved):"
+  sed 's/^/  /' "$tmp/gone"
+fi
+if [ -s "$tmp/new" ]; then
+  echo "scripts/typecheck: type errors beyond $baseline:" >&2
+  # The full diagnostics, with lines and the explanation tsc adds.
+  while IFS= read -r d; do
+    file=${d%%: TS*}
+    rest=${d#"$file: "}
+    code=${rest%%: *}
+    grep -F -- "$file(" "$tmp/out" | grep -F -- "error $code: ${rest#"$code: "}" >&2 || true
+  done < "$tmp/new"
+  exit 1
+fi
+echo "ok $(wc -l < "$tmp/found" | tr -d ' ') diagnostics, all in $baseline ($src)"
