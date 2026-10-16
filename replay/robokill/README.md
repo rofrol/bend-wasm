@@ -4,7 +4,9 @@ The question (TODO t-byai25qu): does Robokill's simulation, built in
 library mode (patch 0003) and driven from a host, give the same state
 hashes and render bytes in wasm as natively, with a bounded heap? Yes:
 every checkpoint of both 10,000-frame replays and every frame's render
-bytes are equal, and the heap is flat over 1,000,000 frames on both.
+bytes are equal, and the heap is flat over 1,000,000 frames on both. The
+plain-clang build (`docs/clang-wasm.md`) is a third lane, `clang`, with the
+same checks.
 
 `run.sh` builds and checks everything; output in `out/` (ignored).
 
@@ -49,7 +51,9 @@ uint64_t bend_def_render(uint64_t s);                // State & Array<F32>
 ## Checks (`run.sh`)
 
 The drivers `replay.c` (native, clang -O3) and `replay.mjs` (the SDK's Node
-on the `scripts/wasm-flags` build) link the same `step.c`. Per frame they
+on the `scripts/wasm-flags` build, and on the plain-clang build of
+`tools/clang-wasm/build.sh` through `tools/clang-wasm/node.mjs factory`)
+link the same `step.c`. Per frame they
 call `step` and `render` and print an FNV-1a hash of the region's 32-bit
 words; at the checkpoints they call `hash` and print its line exactly as
 `replay.bend` does. `run.sh` builds `replay.bend` natively as the
@@ -59,7 +63,8 @@ and in wasm on all 20,000 frames. On a difference it prints the first
 differing frame with both values and stops.
 
 Heap bound, n = 500, `step`, `render` and `hash` every frame, 100,000 and
-1,000,000 frames on both lanes (`BOUND_FRAMES`, `BOUND_WASM`): the
+1,000,000 frames on every lane (`BOUND_FRAMES`, `BOUND_WASM`,
+`BOUND_CLANG`): the
 allocator's high-water mark and the live handle count at every tenth; the
 last may not exceed the first (after warm-up).
 
@@ -80,3 +85,10 @@ Mac (inside a herdr worker's sandbox).
   native 5.2 and 18.6 s (100,000), 44.1 and 67.3 s (1,000,000); wasm 20.4
   and 12.9 s, 114.5 and 95.7 s. The 1,000,000-frame run stays under a
   minute and a half natively, so it runs in wasm too.
+
+2026-10-17, the same toolchain with patch 0004 and the plain-clang build
+(`docs/clang-wasm.md`), one run in the worker sandbox: all three lanes'
+checkpoints and render hashes equal; 39,040 words and 1 handle at every
+checkpoint of 1,000,000 frames on the clang lane too. Wall times (a shared
+machine): replay wasm 12.0 s, clang 14.0 s; 1,000,000 frames native
+73.8 s, wasm 197.3 s, clang 213.7 s. The whole script took 9.5 minutes.

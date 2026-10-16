@@ -1,7 +1,13 @@
 #!/bin/sh
 # Conformance and failure tests of the wasm glue (glue/README.md), in the
-# SDK's Node. Builds Robokill's step.bend (replay/robokill/, vendored from
-# Robokill 63031ab) four ways into glue/out/ (ignored):
+# SDK's Node:
+#
+#   glue/test/run.sh [--clang]
+#
+# --clang tests the plain-clang build (glue/build.sh --clang,
+# docs/clang-wasm.md) into glue/out/clang/ instead of the Emscripten one.
+# Builds Robokill's step.bend (replay/robokill/, vendored from Robokill
+# 63031ab) four ways into glue/out/ (ignored):
 #
 # - the JS lane, `scripts/bend step.bend -o step.mjs`;
 # - the wasm lane, Node-capable, `glue/build.sh --node step.bend
@@ -27,6 +33,10 @@ set -u
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 out=glue/out
+build=
+if [ "${1:-}" = --clang ]; then
+  out=glue/out/clang build=--clang
+fi
 rk=replay/robokill
 sdk=${BEND_WASM_EMSDK:-$HOME/.cache/bend-wasm/emsdk-6.0.10}
 node=$(find "$sdk/node" -path '*/bin/node' -type f 2>/dev/null | head -n 1)
@@ -55,12 +65,16 @@ step() {
 }
 
 step js scripts/bend "$rk/step.bend" -o "$out/step.mjs"
-sh glue/build.sh --node "$rk/step.bend" init,input_at,step,hash,render \
+# shellcheck disable=SC2086 # $build is empty or one word
+sh glue/build.sh --node $build "$rk/step.bend" init,input_at,step,hash,render \
   "$out" step || die "glue/build.sh step"
-sh glue/build.sh "$out/step.c" "$out/web" step || die "glue/build.sh web step"
+# shellcheck disable=SC2086
+sh glue/build.sh $build "$out/step.c" "$out/web" step \
+  || die "glue/build.sh web step"
 { echo "#define BEND_LIB_SLOTS 4"; cat "$out/step.c" glue/test/trap.c; } \
   > "$out/trap-src.c"
-sh glue/build.sh --node "$out/trap-src.c" "$out" trap \
+# shellcheck disable=SC2086
+sh glue/build.sh --node $build "$out/trap-src.c" "$out" trap \
   || die "glue/build.sh trap"
 step ref scripts/bend "$rk/replay.bend" -o "$out/ref.bin"
 
@@ -88,4 +102,4 @@ echo "ok: the JS lane and the wasm glue print the same" \
   || die "glue/test/failure.mjs"
 sh glue/test/shipped.sh "$out/web" "$out" step || die "glue/test/shipped.sh"
 rm -rf "$out/tmp"
-echo "ok: glue conformance and failure tests"
+echo "ok: glue conformance and failure tests${build:+ ($build)}"

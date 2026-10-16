@@ -2,19 +2,23 @@
 # Robokill's headless replay through library mode (replay/robokill/README.md,
 # TODO t-byai25qu). Builds step.bend with `--lib init,input_at,step,hash,render`
 # once, links that C natively (replay.c) and to wasm (replay.mjs under the
-# SDK's Node, scripts/wasm-flags), and builds the vendored replay.bend
-# natively as the reference. Checks, stopping at the first that fails:
+# SDK's Node, scripts/wasm-flags), builds it with the plain-clang build too
+# (tools/clang-wasm/build.sh, docs/clang-wasm.md; the clang lane, the same
+# replay.mjs through tools/clang-wasm/node.mjs's factory), and builds the
+# vendored replay.bend natively as the reference. Checks, stopping at the
+# first that fails:
 #
 # - the checkpoint lines (state hash at frames 0, 1,000, ..., 10,000 for
 #   n = 500 and 2,000) are equal for replay.bend, the native driver and
-#   the wasm driver;
+#   the wasm and clang drivers;
 # - the final hashes are Robokill's (spike/RESULTS.md at 63031ab):
 #   603820250 for n = 500, 819172968 for n = 2,000;
 # - the render hash (FNV-1a of the F32 region after every frame's render)
-#   is equal natively and in wasm on every frame;
+#   is equal natively, in wasm and in the clang build on every frame;
 # - the heap bound, n = 500, step + render + hash for BOUND_FRAMES frames
-#   (default "100000 1000000"), natively and in wasm (BOUND_WASM, default
-#   the same list): at the last checkpoint the allocator's high-water mark
+#   (default "100000 1000000"), natively, in wasm (BOUND_WASM, default the
+#   same list) and in the clang build (BOUND_CLANG, default BOUND_WASM's
+#   list): at the last checkpoint the allocator's high-water mark
 #   and the live handle count are no higher than at the first (frame
 #   FRAMES/10, after warm-up).
 # On a difference it prints the first differing frame and both values.
@@ -36,6 +40,7 @@ fi
 cc=${CC:-clang}
 frames_list=${BOUND_FRAMES:-100000 1000000}
 wasm_list=${BOUND_WASM-$frames_list}
+clang_list=${BOUND_CLANG-$wasm_list}
 exports=_bend_init,_bend_heap_words,_bend_handles,_bend_f32,_bend_f32_len
 exports=$exports,_bend_def_init,_bend_def_input_at,_bend_def_step
 exports=$exports,_bend_def_hash,_bend_def_render,_malloc
@@ -106,26 +111,32 @@ step native "$cc" -std=c11 -O3 "$out/step.c" "$here/replay.c" -lpthread \
 step wasm scripts/emcc $(scripts/wasm-flags) -sMODULARIZE -sEXPORT_ES6 \
   -sEXPORTED_FUNCTIONS=$exports -sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAPU32 \
   "$out/step.c" -o "$out/step.mjs"
+step clang sh tools/clang-wasm/build.sh "$out/step.c" "$out/clang" step
+"$node" tools/clang-wasm/node.mjs factory "$out/clang/step.wasm" \
+  > "$out/step-clang.mjs" || die "tools/clang-wasm/node.mjs factory"
 
 timed ref "$out/ref.bin"
 timed native "$out/replay"
 timed wasm "$node" "$here/replay.mjs" "$out/step.mjs"
+timed clang "$node" "$here/replay.mjs" "$out/step-clang.mjs"
 
-for lane in native wasm; do
+for lane in native wasm clang; do
   grep '^n=' "$out/$lane.out" > "$out/$lane.points"
   grep '^render ' "$out/$lane.out" > "$out/$lane.render"
 done
 cp "$out/ref.out" "$out/ref.points"
 same "checkpoints, replay.bend vs native" "$out/ref.points" "$out/native.points"
 same "checkpoints, native vs wasm" "$out/native.points" "$out/wasm.points"
+same "checkpoints, native vs clang" "$out/native.points" "$out/clang.points"
 grep -qx 'n=500 frame=10000 hash=603820250' "$out/ref.points" \
   && grep -qx 'n=2000 frame=10000 hash=819172968' "$out/ref.points" \
   || die "final hashes differ from Robokill's RESULTS.md:" \
     "$(grep 'frame=10000' "$out/ref.points" | paste -sd, -)"
 same "render hashes, native vs wasm" "$out/native.render" "$out/wasm.render"
+same "render hashes, native vs clang" "$out/native.render" "$out/clang.render"
 echo "ok: $(wc -l < "$out/ref.points" | tr -d ' ') checkpoints equal" \
-  "(replay.bend, native, wasm), final hashes as RESULTS.md, render hashes" \
-  "equal on $(wc -l < "$out/native.render" | tr -d ' ') frames"
+  "(replay.bend, native, wasm, clang), final hashes as RESULTS.md, render" \
+  "hashes equal on $(wc -l < "$out/native.render" | tr -d ' ') frames"
 
 # bound NAME: the high-water and handle check on out/NAME.out.
 bound() {
@@ -149,7 +160,13 @@ for f in $wasm_list; do
   timed "bound-wasm-$f" "$node" "$here/replay.mjs" "$out/step.mjs" bound "$f"
   bound "bound-wasm-$f"
 done
+for f in $clang_list; do
+  timed "bound-clang-$f" "$node" "$here/replay.mjs" "$out/step-clang.mjs" \
+    bound "$f"
+  bound "bound-clang-$f"
+done
 
 rm -rf "$out/tmp"
 echo "ok: replay equal on all lanes; heap and handles flat over" \
-  "$frames_list frames (native) and ${wasm_list:-no} frames (wasm)"
+  "$frames_list frames (native), ${wasm_list:-no} frames (wasm) and" \
+  "${clang_list:-no} frames (clang)"

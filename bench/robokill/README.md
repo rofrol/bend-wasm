@@ -26,6 +26,14 @@ The Chrome numbers are still to be measured; `run.sh` measures them
   renderer process's memory for `serve.mjs`.
 - `check.sh` and `check.mjs`: what can be checked without a browser.
 
+`WASM_BUILD=clang` before `build.sh`, `check.sh`, `node.sh` or `run.sh`
+builds the wasm lane with the plain-clang build instead of Emscripten's
+(`glue/build.sh --clang`, `docs/clang-wasm.md`, TODO t-fwjpak4c); the
+default, `emcc`, is what ships. The page and the hosts load it unchanged;
+`summary.mjs` then counts no `step.lib.mjs` among the shipped files and
+marks `baseline.json` `"build": "clang"`: that build's numbers, to compare
+with the frozen emcc baseline, not a new baseline.
+
 ## Edits to the vendored page
 
 `diff <(git -C "$ROBOKILL" show 63031ab:spike/main.js) bench/robokill/main.js`
@@ -91,7 +99,9 @@ SDK's Node, driven as `spike/main.js` drives them, without the GPU:
 per frame `step` then `render` into a `Float32Array(16384)`, timed with
 `performance.now()` (for wasm this includes the glue's copy into `out`);
 the state hash every 1,000 frames outside the timed region, the final one
-checked against RESULTS.md on both lanes. n = 500 and 2,000; 5 blocks,
+checked against RESULTS.md on both lanes; the wasm lane's last state of
+each replay is then disposed (the JS lane's collector frees it), as the
+fixed corpus would otherwise fill with them. n = 500 and 2,000; 5 blocks,
 each 10,000 frames from `init` on each lane, the lane order alternating
 between blocks. `BLOCKS`, `FRAMES`, `SIZES` change that. Report in
 `out/node.md`, raw numbers in `out/node.json`.

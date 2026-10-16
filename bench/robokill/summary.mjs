@@ -15,6 +15,9 @@
 // "When plain clang replaces emcc"): the shipped sizes of both lanes from
 // <dist> (each file raw and `gzip -9 -n`), the wasm lane's linear memory,
 // the memory medians and Chrome's step+upload p50/p95 medians per n.
+// WASM_BUILD=clang (build.sh) says the wasm lane is the plain-clang
+// build: it ships no step.lib.mjs, and baseline.json is then that build's
+// numbers to compare with the frozen emcc baseline, not a new baseline.
 // `node summary.mjs <dir> [<dist>]`, <dist> defaulting to ./dist beside
 // this script; exit status 1 when a check fails.
 import { execFileSync } from "node:child_process";
@@ -26,8 +29,10 @@ import { fileURLToPath } from "node:url";
 const [dir, dist = fileURLToPath(new URL("dist", import.meta.url))] =
   process.argv.slice(2);
 // What the page loads per lane (main.js, the lane's imports).
+const build = process.env.WASM_BUILD ?? "emcc";
 const SHIPPED = { js: ["step.mjs"],
-  wasm: ["step.wasm.mjs", "bend-glue.mjs", "step.lib.mjs", "step.lib.wasm"] };
+  wasm: ["step.wasm.mjs", "bend-glue.mjs",
+    ...build === "clang" ? [] : ["step.lib.mjs"], "step.lib.wasm"] };
 const FINAL = { 500: 603820250, 2000: 819172968 };
 const runs = readdirSync(dir).flatMap((f) => {
   const m = /^(\d+)-(js|wasm)\.json$/.exec(f);
@@ -217,8 +222,11 @@ if (bad.length === 0 && runs.length > 0) {
   }
   const toolchain = join(dir, "toolchain.txt");
   const baseline = {
-    what: "Frozen emcc baseline of the clang cutover criteria"
+    what: (build === "clang"
+      ? "The plain-clang build's numbers for the clang cutover criteria"
+      : "Frozen emcc baseline of the clang cutover criteria")
       + " (bench/robokill/README.md); medians over blocks",
+    build,
     toolchain: existsSync(toolchain) ? readFileSync(toolchain, "utf8").trim() : null,
     userAgent: first.userAgent,
     adapter: first.adapter,

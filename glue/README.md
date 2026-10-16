@@ -9,15 +9,21 @@ same host code with identical output.
 ## Build
 
 ```sh
-glue/build.sh [--node] MODULE.bend DEFS OUTDIR NAME   # emits C with --lib DEFS first
-glue/build.sh [--node] FILE.c OUTDIR NAME             # from library-mode C
+glue/build.sh [--node] [--clang] MODULE.bend DEFS OUTDIR NAME   # emits C with --lib DEFS first
+glue/build.sh [--node] [--clang] FILE.c OUTDIR NAME             # from library-mode C
 ```
 
 `OUTDIR` gets `NAME.wasm.mjs` (what the host imports), `bend-glue.mjs`
-(the runtime, `glue.mjs` with the environment's `wasmBytes` reader
-appended), and the Emscripten build `NAME.lib.mjs` + `NAME.lib.wasm`
-(`scripts/wasm-flags`, `-sMODULARIZE -sEXPORT_ES6 -sFILESYSTEM=0`; memory
-growth off). Outputs are ignored by git wherever they are built
+(the runtime, `glue.mjs` with the build's backend and the environment's
+`wasmBytes` reader appended), and the build: by default Emscripten's,
+`NAME.lib.mjs` + `NAME.lib.wasm` (`scripts/wasm-flags`, `-sMODULARIZE
+-sEXPORT_ES6 -sFILESYSTEM=0`; memory growth off), with the backend
+`load-emcc.mjs`, which instantiates through `NAME.lib.mjs`; with `--clang`
+the plain-clang build of `tools/clang-wasm/build.sh` (no emcc, no
+`NAME.lib.mjs`; `docs/clang-wasm.md`, "Step (D)"), `NAME.lib.wasm` only,
+with the backend `load-clang.mjs`, which serves the module's three imports
+(`write`, `exit`, `now`) itself. Both have the same shape below; emcc's is
+what ships until the cutover (TODO t-fwjpak4c). Outputs are ignored by git wherever they are built
 (`glue/out/`, `bench/robokill/dist/`, `bench/robokill/out/`).
 
 Two builds of the same C, from the one generator:
@@ -30,7 +36,8 @@ Two builds of the same C, from the one generator:
 
 The `.wasm` is the same bytes in both; only the JavaScript differs.
 `glue/test/shipped.sh WEBDIR NODEDIR NAME` checks both: the shipped
-`NAME.wasm.mjs`, `bend-glue.mjs` and `NAME.lib.mjs` name none of
+`NAME.wasm.mjs`, `bend-glue.mjs` and `NAME.lib.mjs` (when
+`NAME.wasm.mjs` imports it) name none of
 `require`, `process`, `Buffer`, `fs`, `path`, `__dirname` or `node:`
 (`path` only as `path.` or `"path"`: Emscripten's `locateFile(path)` has a
 parameter of that name), and the two `NAME.lib.wasm` are identical (`cmp`).
@@ -100,7 +107,8 @@ become a thrown JS `Error`:
   was consumed, disposed or never made (handle 0x100000001)`. The
   library's `_exit` reaches the glue's own `proc_exit` import, which
   throws instead of Emscripten's, so the process's `process.exitCode`
-  stays untouched in Node;
+  stays untouched in Node (the plain-clang build's `exit` import throws
+  the same way);
 - a trap: `bend-wasm: <def>: wasm trap: RuntimeError: ...`, with any
   stderr lines before it; `cause` is the original error.
 
@@ -124,7 +132,8 @@ Nat that is not a BigInt) throw without poisoning, as nothing has run.
 
 ## Tests
 
-`glue/test/run.sh` (the SDK's Node, about 40 s) builds Robokill's
+`glue/test/run.sh [--clang]` (the SDK's Node, about 40 s; `--clang` tests
+the plain-clang build into `glue/out/clang/`, about 70 s) builds Robokill's
 `step.bend` (`replay/robokill/`, vendored from Robokill `63031ab`) as the
 JS lane and through the glue (Node-capable, and shipped into
 `glue/out/web/`), and requires:

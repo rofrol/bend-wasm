@@ -3,10 +3,11 @@
 TODO t-fwjpak4c, step (A): what does Bend's emitted C need from a libc when
 it is compiled for wasm32 by plain clang, without emcc? This sizes steps
 (B) (mem*, allocator, printing, abort, host imports, `wasm-ld --no-entry`)
-and (C) (math from vendored musl). Step (B), the build itself, and step
-(C), musl's math, float parsing and formatting, are at the end ("Step (B):
-the freestanding build", "Step (C): math, float parsing and formatting
-from musl").
+and (C) (math from vendored musl). Step (B), the build itself, step (C),
+musl's math, float parsing and formatting, and step (D), the JS loader and
+the gates, are at the end ("Step (B): the freestanding build", "Step (C):
+math, float parsing and formatting from musl", "Step (D): the loader and
+the gates").
 
 `tools/clang-wasm/inventory.sh` answers it; results in
 `tools/clang-wasm/out/` (ignored). It emits the C of the 51 programs of
@@ -556,3 +557,128 @@ module links a math function, as none calls one (step (A)).
 | `io_nat_host_neg` | 44800 | 53244 | 19347 | 24265 |
 | `robokill_step` | 28410 | 34619 | 12083 | 15510 |
 | `total (52)` | 2434359 | 2845972 | 1023004 | 1271035 |
+
+## Step (D): the loader and the gates
+
+2026-10-17, the toolchain of step (A), patches 0001-0004 and step (C)'s
+sources. Emcc still ships: nothing here switches the default build.
+
+### The loader
+
+The plain build reuses the glue (`glue/README.md`) with a second backend
+rather than a parallel copy. `glue/glue.mjs` keeps everything both builds
+share (the handles, the failure rule, poisoning, `reset()`, the F32
+region, the defs' wrappers that `glue/gen.mjs` writes) and calls
+`instantiate(lane)`, which `glue/build.sh` appends with the reader, as it
+appends `read-web.mjs`/`read-node.mjs`:
+
+- `glue/load-emcc.mjs`: Emscripten's factory (`NAME.lib.mjs`), as before;
+- `glue/load-clang.mjs`: `WebAssembly.instantiate` with the three imports
+  of module `bend` (`write`: fd 1 and 2 cut into lines, stdout to
+  `console.log` and stderr into the error lines, as Emscripten's `print`
+  and `printErr`; `exit`: throws, as the Emscripten backend's `proc_exit`;
+  `now`: `performance.now()` in nanoseconds), then `__wasm_call_ctors`.
+
+So the shipped page gets only its own build's code, and no Node code
+(`glue/test/shipped.sh`). `glue/gen.mjs module FILE.c NAME clang` writes
+the same `NAME.wasm.mjs` without the factory's import; `glue/build.sh
+--clang` builds with `tools/clang-wasm/build.sh` (its other files in
+`OUTDIR/NAME.clang/`) and writes `NAME.wasm.mjs`, `bend-glue.mjs` and
+`NAME.lib.wasm`, the names the hosts already import, so
+`glue/test/*`, `replay/robokill` and `bench/robokill` load either build
+unchanged.
+
+For the tests in Node only, `tools/clang-wasm/node.mjs` hosts the same
+three imports on the process (`writeSync`, `process.exit`,
+`process.hrtime`): `node.mjs run FILE.wasm ARGS` runs a program
+(`__main_argc_argv` with argv placed by the module's `malloc`, argv[0]
+`./this.program` as Emscripten's), and `node.mjs factory FILE.wasm` writes
+a module with the Emscripten factory's shape as far as the library tests'
+drivers use it (`_`-prefixed exports, `HEAPU8`, `HEAPU32`), so
+`replay/robokill/replay.mjs`, `probe/lib/drive.mjs` and
+`tests/negative/consumed.mjs` run on it unchanged.
+
+### Gates
+
+Each runs from a script; all passed on 2026-10-17 in herdr's worker
+sandbox (Apple arm64, the SDK's Node 24.19.0).
+
+| Gate | Script | Result |
+|---|---|---|
+| Differential, 51 programs | `tests/differential/run.sh`, lane `clang-wasm` (default lanes now `js wasm clang-wasm`) | 153 of 153 ok: stdout, stderr and exit status equal to native on every lane (stderr is now compared on every lane; 5 min 17 s) |
+| Negative | `tests/negative/run.sh` | every case caught; the clang lane in the cases below |
+| Glue conformance, failure, poisoning, reset, shipped | `glue/test/run.sh --clang` | all ok, as the emcc build (`glue/test/run.sh`) |
+| Robokill replay | `replay/robokill/run.sh` (lane `clang`) | 22 checkpoints equal to `replay.bend`, native and emcc's; final hashes 603820250 and 819172968; render hashes equal on all 20,000 frames |
+| Heap bound | the same, `BOUND_CLANG` (default `100000 1000000`) | 39,040 words of high-water and 1 live handle at every checkpoint over 1,000,000 frames, as native and emcc's |
+| `return_call` for every live `musttail` | `tools/clang-wasm/build.sh`'s check (step B), in every build above | all 52 modules: no segment enters a segment without a tail call; 1,186 sites, 1,187 `return_call`s, all kept by `wasm-opt` |
+| Reproducibility | `tools/clang-wasm/repro.sh` | two clean builds into different paths: `libc.a`, the 52 modules and Robokill's shipped glue identical (56 files) |
+| Step B and C checks | `tools/clang-wasm/check.sh`, `math-check.sh` | 52 build and validate; 571,452 math, parse and format calls bit-identical to emcc |
+
+Negative cases on the clang lane:
+
+- stale (the real series): `consumed.mjs` on the plain build of
+  `probe/lib`'s counter (through `node.mjs factory`) exits 1 with the
+  handle message;
+- env-abi (patch 0002's two-word `Env` reverted): the clang lane reports
+  `reg_nat_chain`, `run_bst_insert`, `run_insertion_sort` and
+  `run_string_algorithms`, the emcc lane the first, second and fourth. A
+  segment then reads `Env` from a frame the tail call freed; what
+  overwrote it, and so which programs go wrong, depends on the code, which
+  differs between the builds (both are reproducible, so each set is
+  fixed);
+- missing-lane: under `BEND_PATCH=0` the run names both wasm lanes as not
+  available;
+- leak and stale-handle (mutants under `probe/lib/run.sh`): not on the
+  clang lane. Their check is `probe/lib/run.sh`, whose wasm driver builds
+  with emcc only; giving it a clang lane is a change to `probe/lib`,
+  outside this step. The replay's heap bound above covers the clang
+  lane's heap, and the stale case its handle check.
+
+### Sizes
+
+Robokill's shipped files (`glue/build.sh`, without `--node`), bytes raw /
+`gzip -9 -n`:
+
+| File | emcc | plain clang |
+|---|--:|--:|
+| `step.wasm.mjs` | 1,928 / 648 | 1,893 / 642 |
+| `bend-glue.mjs` | 7,981 / 3,020 | 8,667 / 3,330 |
+| `step.lib.mjs` | 8,379 / 2,902 | (none) |
+| `step.lib.wasm` | 34,619 / 15,487 | 28,410 / 12,064 |
+| total | 52,907 / 22,057 | 38,970 / 16,036 |
+
+gzip-compressed, the plain build ships 27.3% less than emcc's today and
+27.4% less than the frozen emcc baseline (22,087, DECISIONS.md, "Memory
+in Chrome and the frozen emcc baseline"; its `bend-glue.mjs` and
+`step.lib.mjs` have changed since): the 20% criterion holds. Raw, 26.3%
+less. `bend-glue.mjs` grew by the backend's comment lines on both builds.
+
+### Node benchmark
+
+`WASM_BUILD=clang bench/robokill/node.sh` against `bench/robokill/node.sh`,
+one run each in the sandbox (a shared machine, so the tails are noisy):
+ms per frame of step + render, p50, n = 500 and 2,000: emcc 0.065 and
+0.315, plain clang 0.066 and 0.314. A Node number, not the criterion.
+
+Both runs first failed at n = 2,000 with "the corpus ... is full":
+`node-bench.mjs` dropped each replay's last state without disposing it,
+and the wasm lane's fixed corpus fills with them since the memory work;
+it now disposes it (emcc and clang alike).
+
+### Not run: the Chrome criteria
+
+Chrome cannot start in the worker sandbox, so these are the coordinator's,
+with the user's go:
+
+- linear memory not above the frozen emcc baseline (11,534,336 bytes);
+  the plain build has the same pages (176 for Robokill, step B), but
+  Chrome's numbers are the criterion;
+- frame p95 (step + upload) within 5% of the frozen baseline in
+  DECISIONS.md.
+
+`WASM_BUILD=clang bench/robokill/run.sh` runs the page on the plain build
+(`bench/robokill/README.md`); its `out/baseline.json` then holds that
+build's numbers (`"build": "clang"`), to compare with the frozen one.
+`WASM_BUILD=clang bench/robokill/check.sh` passes its sandbox parts (the
+page loads the clang lane; the summary); its server part needs a local
+port.

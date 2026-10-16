@@ -5,9 +5,10 @@
 # clang build of TODO t-fwjpak4c steps B and C (docs/clang-wasm.md), and
 # validates each module with tools/clang-wasm/check.mjs in the SDK's node:
 # it instantiates with stub imports, lists them and fails on a missing
-# export or an import the host does not serve. Nothing runs: running the
-# programs is step D's loader (tools/clang-wasm/math-check.sh runs the
-# musl part).
+# export or an import the host does not serve. Nothing runs here: the
+# programs run in tests/differential/run.sh's clang-wasm lane
+# (tools/clang-wasm/node.mjs), the library through glue/build.sh --clang
+# (step D), and tools/clang-wasm/math-check.sh runs the musl part.
 #
 # For the sizes, each C is also built with emcc as today (scripts/emcc and
 # scripts/wasm-flags for a program, as tests/differential/run.sh; the

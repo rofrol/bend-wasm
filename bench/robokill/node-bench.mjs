@@ -32,13 +32,17 @@ const t1 = performance.now();
 const wasmLane = await import(url(wasmPath));
 const t2 = performance.now();
 const lanes = { js, wasm: wasmLane.default };
+// Drops a replay's last state. The wasm lane keeps a value until it is
+// consumed or disposed (glue/README.md), and its fixed corpus fills after
+// a few replays' states otherwise; the JS lane's collector frees it.
+const drop = { js: () => {}, wasm: wasmLane.dispose };
 const load = {
   js: { importMs: t1 - t0 },
   wasm: { importMs: t2 - t1, ...wasmLane.timings() },
 };
 
 // One replay of `frames` frames for n bodies; the per-frame times in ms.
-function run(G, n) {
+function run(G, n, dispose) {
   const out = new Float32Array(16384);
   const ms = new Float64Array(frames);
   let state = G.init(n, 12345);
@@ -59,6 +63,7 @@ function run(G, n) {
     ms[frame] = performance.now() - a;
   }
   checkpoint();
+  dispose(state);
   if (frames === 10000 && FINAL[n] !== undefined && last !== FINAL[n]) {
     throw new Error(`n=${n}: final hash ${last}, RESULTS.md has ${FINAL[n]}`);
   }
@@ -77,7 +82,7 @@ for (const n of sizes) {
   for (let b = 0; b < blocks; b += 1) {
     const order = b % 2 === 0 ? ["js", "wasm"] : ["wasm", "js"];
     for (const lane of order) {
-      per[lane].push(run(lanes[lane], n));
+      per[lane].push(run(lanes[lane], n, drop[lane]));
     }
     console.error(`n=${n} block ${b + 1}/${blocks} (${order.join(", ")})`);
   }

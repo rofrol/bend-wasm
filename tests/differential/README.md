@@ -1,7 +1,7 @@
 # Differential test: native vs JS and wasm lanes
 
 `tests/differential/run.sh` builds every program in `corpus.txt` on each
-lane and compares its stdout and exit code byte for byte with the native
+lane and compares its stdout, stderr and exit code byte for byte with the native
 lane (`docs/plan.md`, "Correctness and value checks"). It is the herdr check
 `differential` (`.herdr/checks.toml`).
 
@@ -12,9 +12,9 @@ sh tests/differential/run.sh
 It prints one line per program and lane (`ok`, `DIFFERS`, `FAILED` with the
 reason) and a summary, writes everything to `tests/differential/out/`
 (ignored), and exits 0 only when every program matched native on every lane
-in `LANES` (default `js wasm`). A lane in `LANES` that cannot be built
-here fails the run at once, before any program, so a missing lane is never
-a silent pass.
+in `LANES` (default `js wasm clang-wasm`). A lane in `LANES` that cannot
+be built here fails the run at once, before any program, naming every such
+lane, so a missing lane is never a silent pass.
 
 The native and JS lanes build a program as Bend's own gate does
 (`vendor/bend/gates/test.ts`); all lanes go through `scripts/bend`:
@@ -24,9 +24,11 @@ The native and JS lanes build a program as Bend's own gate does
 | native | `scripts/bend P -o P.bin` (clang `-O3`) | `./P.bin` |
 | js | `scripts/bend P -o P.js` | `bun P.js`, the Bun `scripts/bend` pins, with the gate's `BUN_JSC_maxPerThreadStackUsage` |
 | wasm | `scripts/bend P -o P.c`, then `scripts/emcc $(scripts/wasm-flags) P.c -o P.js` (the probe's `w32-patched` target: wasm32, `-mtail-call`, a fixed memory the linker sizes per program, no growth; `docs/probe.md`) | `node P.js`, the Node of the pinned Emscripten SDK |
+| clang-wasm | `scripts/bend P -o P.c`, then `tools/clang-wasm/build.sh` (plain clang and wasm-ld, no emcc; the same memory; `docs/clang-wasm.md`) | `node tools/clang-wasm/node.mjs run P.wasm`, the same Node |
 
-The wasm lane needs patches 0001 and 0002, so under `BEND_PATCH=0` it is
-not available and the default run fails. A run of the unpatched pin names
+The wasm lane needs patches 0001 and 0002, and the clang-wasm lane patch
+0004 too, so under `BEND_PATCH=0` neither is available and the default run
+fails. A run of the unpatched pin names
 its lanes explicitly:
 
 ```sh
@@ -34,7 +36,8 @@ BEND_PATCH=0 LANES=js sh tests/differential/run.sh
 ```
 
 A lane is a name in `lanes` plus its `lane_build_<name>` and
-`lane_run_<name>` functions in `run.sh`. Each run has a hang guard of 5 s
+`lane_run_<name>` functions in `run.sh` (a `-` in the name is `_` in the
+functions'). Each run has a hang guard of 5 s
 of CPU time (`scripts/guard`), mirroring Bend's own gate for the same
 non-`!` programs (`vendor/bend/gates/test.ts:136`); CPU time, not wall
 time, so checks running in parallel do not kill a slowed program. It only

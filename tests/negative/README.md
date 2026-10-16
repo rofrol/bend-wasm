@@ -29,11 +29,15 @@ below come from the mutants.
 | Case | Known-bad build | Check that must fail, and its message |
 | --- | --- | --- |
 | leak | `leak.patch`: every library-mode call allocates a task node it never frees | `probe/lib/run.sh`: `FAILED: native: the heap high-water grew ...` (the mark at 100,000 steps above the mark at 10,000); in wasm the same message, or the runtime's out-of-memory error (`ERR_HEAP`, `bend: out of memory: ...`) when the default corpus fills first, with only its consequences (the wasm drivers exit 1, their output differs from native's); nothing else |
-| stale | real series: `consumed.c` and `consumed.mjs` peek a handle `step` consumed | `bend: peek: a handle that was consumed, disposed or never made` and exit 1, natively and in wasm |
+| stale | real series: `consumed.c` and `consumed.mjs` peek a handle `step` consumed | `bend: peek: a handle that was consumed, disposed or never made` and exit 1, natively and in wasm (emcc's build, and the plain-clang build through `tools/clang-wasm/node.mjs factory`) |
 | stale | `stale-handle.patch`: `lib_take` no longer checks liveness and generation | `probe/lib/run.sh`: `a disposed handle gave exit ...` for both drivers (they loop until the hang guard stops them), and nothing else |
-| env-abi | `env-abi.patch`: reverts patch 0002's two-word `Env` passing | `LANES=wasm tests/differential/run.sh`: exactly `reg_nat_chain`, `run_bst_insert`, `run_string_algorithms` DIFFER or FAIL on the wasm lane |
-| missing-lane | `BEND_PATCH=0`, so the wasm lane cannot be built | `tests/differential/run.sh` with its default lanes: `wasm: FAILED, not available` |
+| env-abi | `env-abi.patch`: reverts patch 0002's two-word `Env` passing | `LANES="wasm clang-wasm" tests/differential/run.sh`: exactly `reg_nat_chain`, `run_bst_insert`, `run_string_algorithms` DIFFER or FAIL on the wasm lane, and those and `run_insertion_sort` on the clang-wasm lane (which programs read the freed frame wrongly depends on the build's code; both builds are reproducible) |
+| missing-lane | `BEND_PATCH=0`, so the wasm lanes cannot be built | `tests/differential/run.sh` with its default lanes: `wasm: FAILED, not available` and `clang-wasm: FAILED, not available` |
 
-It takes about 2.5 minutes (2026-10-16, Apple arm64 Mac, warm
+The leak and stale-handle mutants are not checked on the plain-clang
+build: their check, `probe/lib/run.sh`, builds its wasm driver with emcc
+only (`docs/clang-wasm.md`, "Step (D)").
+
+It takes about 5 minutes (2026-10-17, Apple arm64 Mac, warm
 `.toolchain/` and Emscripten cache), most of it the env-abi case's
-differential run.
+differential run on both wasm lanes.

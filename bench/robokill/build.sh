@@ -10,8 +10,20 @@
 #   --lib init,input_at,step,hash,render, the shipped build (for a page,
 #   -sENVIRONMENT=web; node.sh builds a Node-capable one of dist/step.c).
 #
+# WASM_BUILD picks the wasm lane's build: emcc (the default, what ships)
+# or clang, the plain-clang build (glue/build.sh --clang,
+# docs/clang-wasm.md), for the cutover criteria of TODO t-fwjpak4c.
+# check.sh, node.sh and run.sh build through this script and pass it on.
+#
 # Exit status: 0 when both built.
 set -u
+case ${WASM_BUILD:-emcc} in
+  emcc) build= ;;
+  clang) build=--clang ;;
+  *)
+    echo "bench/robokill/build.sh: WASM_BUILD=$WASM_BUILD: emcc or clang" >&2
+    exit 2 ;;
+esac
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 dist=bench/robokill/dist
@@ -24,5 +36,6 @@ if ! TMPDIR="$root/$dist/tmp" scripts/bend replay/robokill/step.bend \
   exit 1
 fi
 rm -rf "$dist/tmp"
-sh glue/build.sh replay/robokill/step.bend init,input_at,step,hash,render \
-  "$dist" step
+# shellcheck disable=SC2086 # $build is empty or one word
+sh glue/build.sh $build replay/robokill/step.bend \
+  init,input_at,step,hash,render "$dist" step

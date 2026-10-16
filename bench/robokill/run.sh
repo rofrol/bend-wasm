@@ -8,7 +8,9 @@
 # profile on the page and exits once the page has posted its results.
 # QUERY defaults to "n=500,2000&frames=10000" (RESULTS.md's run), PORT to
 # 8642. Then summary.mjs writes out/chrome.md and, when its checks hold,
-# out/baseline.json (the frozen emcc baseline).
+# out/baseline.json (the frozen emcc baseline). WASM_BUILD=clang runs the
+# wasm lane on the plain-clang build instead (build.sh; TODO t-fwjpak4c's
+# Chrome criteria), and baseline.json then records that build's numbers.
 #
 # Chrome cannot start inside the herdr worker sandbox: run this outside it,
 # on a Mac with WebGPU, with the Chrome window in front (rAF slows down

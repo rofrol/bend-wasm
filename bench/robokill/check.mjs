@@ -207,7 +207,11 @@ function summaryCheck() {
       }
     }
     const summary = join(here, "summary.mjs");
-    const r = spawnSync(process.execPath, [summary, out, dist], { encoding: "utf8" });
+    // The fabricated dist is the Emscripten build's, whichever build this
+    // check runs on.
+    const env = { ...process.env, WASM_BUILD: "emcc" };
+    const r = spawnSync(process.execPath, [summary, out, dist],
+      { encoding: "utf8", env });
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.match(r.stdout, /\| 2000 \| wasm \| replay \| 11\.0 \| 3\.0 \| 102\.0 \| 52\.0 \|/);
     const b = JSON.parse(readFileSync(join(out, "baseline.json"), "utf8"));
@@ -231,7 +235,8 @@ function summaryCheck() {
     const broken = fake(2, "wasm");
     broken.runs[1].memory[1].os = { error: "ps: refused" };
     writeFileSync(join(out, "2-wasm.json"), JSON.stringify(broken));
-    const f = spawnSync(process.execPath, [summary, out, dist], { encoding: "utf8" });
+    const f = spawnSync(process.execPath, [summary, out, dist],
+      { encoding: "utf8", env });
     assert.equal(f.status, 1);
     assert.match(f.stdout, /FAILED: block 2 wasm n=2000 replay: no renderer: ps: refused/);
     assert.ok(!existsSync(join(out, "baseline.json")));

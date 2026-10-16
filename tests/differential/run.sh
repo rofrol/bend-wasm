@@ -1,21 +1,24 @@
 #!/bin/sh
 # Differential test of Bend's backends (docs/plan.md, "Correctness and value
 # checks"): every program in tests/differential/corpus.txt is built and run
-# on each lane, and each lane's stdout and exit code must match the native
-# lane's byte for byte. The lanes build a program the way Bend's own test
+# on each lane, and each lane's stdout, stderr and exit code must match the
+# native lane's byte for byte. The lanes build a program the way Bend's own test
 # gate does (vendor/bend/gates/test.ts): `bend t.bend -o t` (clang) and run
 # `./t`; `bend t.bend -o t.js` and run `bun t.js`. The wasm lane builds
 # `bend t.bend -o t.c` with scripts/emcc and scripts/wasm-flags and runs
-# the result with the Emscripten SDK's Node.
+# the result with the Emscripten SDK's Node; the clang-wasm lane builds the
+# same C with tools/clang-wasm/build.sh (plain clang, no emcc;
+# docs/clang-wasm.md) and runs it with tools/clang-wasm/node.mjs in that
+# Node.
 #
 # Output: tests/differential/out/ (ignored; DIFFERENTIAL_OUT, a path
 # relative to the repository root, overrides it, so tests/negative's runs
 # do not clear a run beside them), per program and lane the build log,
 # stdout, stderr and exit code, and summary.txt.
 # Exit status: 0 when every program in the corpus matched native on every
-# lane in LANES. A lane in LANES that cannot be built here (wasm under
-# BEND_PATCH=0) fails the run at once; LANES=js is the explicit opt-out for
-# a pin-only run.
+# lane in LANES. A lane in LANES that cannot be built here (wasm and
+# clang-wasm under BEND_PATCH=0) fails the run at once, naming each;
+# LANES=js is the explicit opt-out for a pin-only run.
 set -u
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
@@ -23,8 +26,8 @@ here=tests/differential
 out=${DIFFERENTIAL_OUT:-$here/out}
 # The lanes compared with native, in order (LANES overrides the list). A
 # lane is one more name here and its lane_build_<name> and lane_run_<name>
-# functions below.
-lanes=${LANES:-js wasm}
+# functions below (a "-" in the name is "_" in the functions').
+lanes=${LANES:-js wasm clang-wasm}
 
 # Same Bun as scripts/bend, which checks its version on every build.
 bun=${BEND_BUN:-$(command -v bun || true)}
@@ -90,25 +93,52 @@ if [ "${BEND_PATCH:-1}" != 0 ]; then
   lane_run_wasm() {
     timed "$node" "$1.js"
   }
+  # The plain-clang build needs patch 0004 too. Every program shares one
+  # output directory, so tools/clang-wasm/libc.sh builds libc.a once.
+  lane_build_clang_wasm() {
+    if [ -z "$node" ]; then
+      echo "no node in $sdk/node (the pinned Emscripten SDK, docs/workflow.md)"
+      return 1
+    fi
+    scripts/bend "$1" -o "$2.c" || return 1
+    n=${2##*/}
+    sh tools/clang-wasm/build.sh "$2.c" "$out/clang-wasm" "$n" || return 1
+    # The object is up to 10 MB (the static corpus); the module is kept.
+    rm -f "$out/clang-wasm/$n.o"
+    cp "$out/clang-wasm/$n.wasm" "$2.wasm"
+  }
+  lane_run_clang_wasm() {
+    timed "$node" tools/clang-wasm/node.mjs run "$1.wasm"
+  }
 fi
 
+# lane_fn LANE: the name of LANE in its functions.
+lane_fn() {
+  echo "$1" | tr - _
+}
+
+missing=
 for lane in $lanes; do
-  if ! type "lane_build_$lane" > /dev/null 2>&1; then
-    say "$lane: FAILED, not available (BEND_PATCH=${BEND_PATCH:-1});" \
-      "set LANES to the lanes this run should compare, e.g. LANES=js"
-    exit 1
+  if ! type "lane_build_$(lane_fn "$lane")" > /dev/null 2>&1; then
+    say "$lane: FAILED, not available (BEND_PATCH=${BEND_PATCH:-1})"
+    missing=1
   fi
 done
+if [ -n "$missing" ]; then
+  say "set LANES to the lanes this run should compare, e.g. LANES=js"
+  exit 1
+fi
 
 # run_lane LANE SRC BASE: builds and runs SRC on LANE into BASE.LANE.*;
 # prints "" when it ran, else the reason it did not.
 run_lane() {
   b=$3.$1
-  if ! lane_build_"$1" "$2" "$b" > "$b.build.log" 2>&1; then
+  f=$(lane_fn "$1")
+  if ! lane_build_"$f" "$2" "$b" > "$b.build.log" 2>&1; then
     echo "build failed: $(head -n 1 "$b.build.log")"
     return
   fi
-  lane_run_"$1" "$b" > "$b.out" 2> "$b.err"
+  lane_run_"$f" "$b" > "$b.out" 2> "$b.err"
   code=$?
   echo $code > "$b.code"
   if [ "$code" = 152 ]; then
@@ -142,6 +172,9 @@ while read -r src rest; do
       status=1
     elif ! cmp -s "$base.$lane.out" "$base.native.out"; then
       say "$p $lane: DIFFERS, stdout (diff $base.native.out $base.$lane.out)"
+      status=1
+    elif ! cmp -s "$base.$lane.err" "$base.native.err"; then
+      say "$p $lane: DIFFERS, stderr (diff $base.native.err $base.$lane.err)"
       status=1
     elif ! cmp -s "$base.$lane.code" "$base.native.code"; then
       say "$p $lane: DIFFERS, exit $(cat "$base.$lane.code"), native" \

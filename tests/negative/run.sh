@@ -89,7 +89,9 @@ then
 fi
 
 # 2. Stale handle. On the real series a handle that step consumed ends in
-# the library's error, natively and in wasm; with the generation check
+# the library's error, natively and in wasm (the Emscripten build and the
+# plain-clang one, the latter through tools/clang-wasm/node.mjs's factory,
+# so the same consumed.mjs drives both); with the generation check
 # removed, probe/lib's disposed-handle check must fail on both.
 if ! TMPDIR="$root/$out/tmp" "$cc" -std=c11 -O3 "$out/counter.c" \
   "$here/consumed.c" -lpthread -lm -o "$out/consumed" > "$out/consumed.build.log" 2>&1
@@ -115,6 +117,16 @@ consumed() {
 }
 consumed native "$out/consumed"
 consumed wasm "$node" "$here/consumed.mjs" "$out/counter.mjs"
+if sh tools/clang-wasm/build.sh "$out/counter.c" "$out/clang" counter \
+  > "$out/consumed.clang.build.log" 2>&1 \
+  && "$node" tools/clang-wasm/node.mjs factory "$out/clang/counter.wasm" \
+    > "$out/counter-clang.mjs"
+then
+  consumed clang-wasm "$node" "$here/consumed.mjs" "$out/counter-clang.mjs"
+else
+  bad "stale: the plain-clang counter does not build" \
+    "(log $out/consumed.clang.build.log)"
+fi
 if expect_fail stale env BEND_PATCH_EXTRA=$here/stale-handle.patch \
   sh probe/lib/run.sh
 then
@@ -127,30 +139,43 @@ then
   fi
 fi
 
-# 3. Env ABI: patch 0002's two-word Env passing reverted; the wasm lane of
-# the differential run must report exactly the three programs it fixed.
-want='reg_nat_chain run_bst_insert run_string_algorithms'
-if expect_fail env-abi env BEND_PATCH_EXTRA=$here/env-abi.patch LANES=wasm \
-  DIFFERENTIAL_OUT=$out/env-abi \
+# 3. Env ABI: patch 0002's two-word Env passing reverted; each wasm lane of
+# the differential run (Emscripten's, and the plain-clang build, which takes
+# the same __EMSCRIPTEN__ path under patch 0004's guard) must report
+# exactly the programs it breaks there: the three patch 0002 fixed, and on
+# the plain-clang build also run_insertion_sort. A segment then reads Env
+# from a frame the tail call freed, so which programs go wrong depends on
+# what the code writes over that frame, which differs between the builds
+# (emcc also optimizes with wasm-opt); both builds are reproducible.
+if expect_fail env-abi env BEND_PATCH_EXTRA=$here/env-abi.patch \
+  LANES="wasm clang-wasm" DIFFERENTIAL_OUT=$out/env-abi \
   sh tests/differential/run.sh
 then
-  got=$(sed -En 's/^([^ ]*) wasm: (DIFFERS|FAILED).*/\1/p' \
-    "$out/env-abi.log" | sort | paste -sd' ' -)
-  if [ "$got" = "$want" ]; then
-    ok "env-abi: the wasm lane reports $want"
-  else
-    bad "env-abi: the wasm lane reports '$got', want '$want'" \
-      "(log $out/env-abi.log)"
-  fi
+  for lane in wasm clang-wasm; do
+    case $lane in
+      wasm) want='reg_nat_chain run_bst_insert run_string_algorithms' ;;
+      clang-wasm) want='reg_nat_chain run_bst_insert run_insertion_sort run_string_algorithms' ;;
+    esac
+    got=$(sed -En "s/^([^ ]*) $lane: (DIFFERS|FAILED).*/\\1/p" \
+      "$out/env-abi.log" | sort | paste -sd' ' -)
+    if [ "$got" = "$want" ]; then
+      ok "env-abi: the $lane lane reports $want"
+    else
+      bad "env-abi: the $lane lane reports '$got', want '$want'" \
+        "(log $out/env-abi.log)"
+    fi
+  done
 fi
 
-# 4. Missing lane: under BEND_PATCH=0 the wasm lane cannot be built, and a
-# run that expects it must fail at once.
+# 4. Missing lane: under BEND_PATCH=0 the wasm lanes cannot be built, and
+# a run that expects them must fail at once, naming both.
 if expect_fail missing-lane env BEND_PATCH=0 \
   DIFFERENTIAL_OUT=$out/missing-lane sh tests/differential/run.sh
 then
-  if grep -q '^wasm: FAILED, not available' "$out/missing-lane.log"; then
-    ok "missing-lane: the differential run fails without the wasm lane"
+  if grep -q '^wasm: FAILED, not available' "$out/missing-lane.log" \
+    && grep -q '^clang-wasm: FAILED, not available' "$out/missing-lane.log"
+  then
+    ok "missing-lane: the differential run fails without the wasm lanes"
   else
     bad "missing-lane: the run failed for another reason" \
       "(log $out/missing-lane.log)"

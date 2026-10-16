@@ -1,6 +1,6 @@
 // Runtime of the wasm lane's glue (glue/README.md). A module that
 // glue/gen.mjs writes (NAME.wasm.mjs) imports this file as ./bend-glue.mjs,
-// opens one Lane on the Emscripten build of a library-mode C (patch 0003)
+// opens one Lane on the wasm build of a library-mode C (patch 0003)
 // and wraps each exported def so the host sees the JS lane's shape: the
 // same calls, `{$: "Tuple", fst, snd}` tuples, numbers, BigInt Nats, and
 // opaque Handle objects where the JS lane has Bend values.
@@ -12,15 +12,22 @@
 // earlier instance are refused. Errors the glue finds before entering
 // wasm (a wrong argument type, a stale handle) throw without poisoning.
 //
-// glue/build.sh appends the reader of the build's environment to this
-// file, wasmBytes(url): glue/read-web.mjs (fetch) in the shipped build,
-// glue/read-node.mjs in the Node-capable one, so the shipped glue has no
-// Node code at all.
+// glue/build.sh appends two parts to this file, so the shipped glue has
+// only the code of its own build:
+//
+// - the backend of the build, instantiate(lane): glue/load-emcc.mjs (the
+//   Emscripten build, through its factory) or glue/load-clang.mjs (the
+//   plain-clang build of tools/clang-wasm/build.sh, which imports only
+//   module "bend": write, exit, now);
+// - the reader of the build's environment, wasmBytes(url):
+//   glue/read-web.mjs (fetch) in the shipped build, glue/read-node.mjs in
+//   the Node-capable one, so the shipped glue has no Node code at all.
 
 const now = () => performance.now();
 
-// Thrown by the proc_exit import, in place of Emscripten's own, which in
-// Node also sets the exit code of the whole program.
+// Thrown by the library's exit (Emscripten's proc_exit import, replaced,
+// as Emscripten's own also sets the exit code of the whole program in
+// Node; the plain build's bend.exit).
 class Exit extends Error {
   constructor(status) {
     super(`the library exited with status ${status}`);
@@ -83,27 +90,7 @@ class Lane {
     this.errs.length = 0;
     this.epoch += 1;
     const t0 = now();
-    let fail;
-    const failed = new Promise((_, reject) => {
-      fail = reject;
-    });
-    let ex;
-    await Promise.race([failed, this.load({
-      printErr: (line) => this.errs.push(line),
-      instantiateWasm: (imports, done) => {
-        imports.env.proc_exit = (code) => {
-          throw new Exit(code);
-        };
-        if (imports.wasi_snapshot_preview1 !== undefined) {
-          imports.wasi_snapshot_preview1.proc_exit = imports.env.proc_exit;
-        }
-        WebAssembly.instantiate(this.mod, imports).then((inst) => {
-          ex = inst.exports;
-          done(inst, this.mod);
-        }, fail);
-        return {};
-      },
-    })]);
+    const ex = await instantiate(this);
     const t1 = now();
     this.ex = ex;
     try {
@@ -217,8 +204,8 @@ class Lane {
 }
 
 // open(load, url, slots): compiles the wasm at url once and starts a lane
-// on it through the Emscripten factory load; slots is the number of
-// result parts any def writes through a pointer.
+// on it; load is the Emscripten factory (null for the plain-clang build);
+// slots is the number of result parts any def writes through a pointer.
 export async function open(load, url, slots) {
   const t0 = now();
   const bytes = await wasmBytes(url);
