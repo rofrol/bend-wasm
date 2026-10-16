@@ -43,3 +43,14 @@ Opened 2026-10-16 after the user approved the text (d-lmevgpkg):
 https://github.com/bendlang/bend/issues/1598, with the probe's facts and the
 questions from `docs/plan.md` (scope, guard macro or flag, single-thread
 mode, heap knob with `mmap(NULL)`, JS-only effect seam).
+
+## No comp.ts patch: the JS lane meets the budget (t-3oqripea)
+
+The user decided 2026-10-16 (d-2dcnim2c) to patch `comp.ts` only if the JS
+lane missed the game's frame budget. Robokill's value check (Robokill
+`63031ab`, `spike/RESULTS.md`, checked by the coordinator): Bend 2.0.35's
+JS lane in Chrome on an M1 Pro runs `step`+`render`+upload at p95 1.09 ms
+for 2,000 bodies (budget 8 ms), with state hashes equal to the native build.
+So no patch; per `docs/plan.md` wasm is now an experiment, not a roadmap.
+The consult round `20261016-124353-d5c1` patch shape stays recorded in git
+history of `TODO.md` should the question return.
