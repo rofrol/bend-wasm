@@ -703,3 +703,12 @@ binary (spawnSync, ~30-line shim, untried), running a program
 (`bun:ffi`), `--verdict`, publish, page bundling. Reproduced by
 `tools/quickjs/run.sh`; details in `docs/quickjs.md`. Follow-up in
 Proposed.
+
+## Node benchmark out of memory at n = 2,000 (t-m72ghzpf)
+
+Done 2026-10-17 in run r-3pyo47m5 (0377339, t-fwjpak4c step D): the
+cause was `bench/robokill/node-bench.mjs` never disposing a replay's last
+state; the wasm lane keeps a value until it is consumed or disposed
+(`glue/README.md`), so the fixed corpus filled after a few replays. It now
+disposes it. The worker's Node run after the fix: p50 emcc 0.065/0.315 ms,
+clang 0.066/0.314 ms (n = 500/2,000). Not rerun by the coordinator.

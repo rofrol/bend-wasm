@@ -64,6 +64,28 @@ Plan and context: `docs/plan.md`.
   caught. All 51 programs match emcc with and without `--gpu 4GB`. Sizes
   grew: 86% of emcc in all (80% gzip), Robokill 82% (78% gzip), wasm only;
   the 20% cutover margin includes the JS, judged at step D. Next: step (D).
+  Step (D) done 2026-10-17 (run r-3pyo47m5, 0377339): `glue/build.sh
+  --clang` with a second glue backend (`load-clang.mjs` beside
+  `load-emcc.mjs`, appended at build time like the reader); the
+  `clang-wasm` lane in `tests/differential/run.sh` (default; stderr now
+  compared on every lane), 153/153; negative cases catch the clang lane
+  (env-abi: 4 programs vs emcc's 3), except leak and stale-handle, whose
+  test `probe/lib/run.sh` builds only with emcc (follow-up below);
+  `glue/test/run.sh --clang`; Robokill replay hashes 603820250 and
+  819172968 and render bytes equal; heap 39,040 words and 1 handle over
+  1,000,000 frames; 1,187 `return_call` for 1,186 `musttail`; two clean
+  builds identical (`tools/clang-wasm/repro.sh`); shipped Robokill wasm +
+  JS 16,036 B gzip vs emcc's 22,057 B: 27.3% smaller (criterion met).
+  Emcc stays the default. Chrome criteria: the coordinator's run (user's
+  go d-ywwivwll, herdr job 20261017-011347-d3e7; the emcc baseline files
+  backed up first).
+
+- [ ] Clang lane in `probe/lib/run.sh` (from t-fwjpak4c step D, run [t-dm5yrhnb]
+  r-3pyo47m5): the negative cases leak and stale-handle run through
+  `probe/lib/run.sh`, which builds wasm only with emcc, so they do not
+  cover the plain-clang build; add a `--clang` build there (`glue/build.sh
+  --clang`) and make both cases fail on it.
+
 - [ ] Offer the patch series upstream on [t-yuiyk4uz]
   https://github.com/bendlang/bend/issues/1598 (the user approves the text
   first).
@@ -157,15 +179,6 @@ Plan and context: `docs/plan.md`.
   `docs/workflow.md` and `docs/probe.md`, and adds negative pages (a
   program that fails, a page that never runs it) that the coordinator runs
   outside the sandbox to show the check still fails.
-
-- [ ] Node benchmark out of memory at n = 2,000 (from t-3wp2nvda, run [t-m72ghzpf]
-  r-mqzurb3s): `bench/robokill/node.sh` stops with `bend: out of memory:
-  the corpus of 1425408 bytes is full`; the worker reports the same on
-  ddc00ce with the old flags (same `.wasm` bytes), so it predates the
-  shipped-glue change. Not yet reproduced by the coordinator. Find why the
-  Node run fills the corpus while the Chrome run at n = 2,000 does not, and
-  fix it or size it (docs/memory.md).
-  Decided by the user 2026-10-16 (d-c2aqguer): approved.
 
 - [ ] Differential check's temp dir deleted mid-run (from t-dyxn2pn3, run [t-vdfibz6b]
   r-tqd3miak, verify event 178884, 2026-10-16 ~21:47): in herdr's verify,
