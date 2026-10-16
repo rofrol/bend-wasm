@@ -4,17 +4,6 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
-- [ ] Follow-up of t-h3ak74p5 (patch 0002 hardening, from run r-t3hzaln6): [t-cqjfh5mc]
-  (1) audit every Term-stack push in the runtime under Emscripten and show
-  each is covered by `WL_ROOM` or the documented 16 KiB slack past
-  `stk_end` (natively the guard page covers all of them), with a probe
-  program per uncovered kind of push if any; (2) `IO.random_u32` does not
-  compile under Emscripten (`getrandom` undeclared, `sys/random.h` only on
-  Linux): make it work (e.g. `getentropy`) or fail loudly; (3) check that
-  `Process.run` fails loudly on wasm. Decided by the coordinator
-  2026-10-16: the wasm stack default stays 8 MiB (the corpus does not
-  bound it from below; deeper recursion fails with ERR_DEEP, as on the JS
-  lane), overridable with `-DBEND_STACK_BYTES`.
 - [ ] Wasm lane in the differential harness (wasm32, `-mtail-call`, fixed [t-tidzr2vk]
   memory); every non-excluded program matches native byte for byte.
   Known from run r-t3hzaln6: with patches 0001 and 0002, 48 of 51 match on

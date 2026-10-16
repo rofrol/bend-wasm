@@ -143,3 +143,14 @@ series). Canonical wasm32 flags: `-std=c11 -O2 -mtail-call
 -sALLOW_MEMORY_GROWTH=0 -sINITIAL_MEMORY=528MB` (`probe/run.sh`
 `w32-patched`). 48 of 51 corpus programs match on wasm32; the 3 others
 are in t-tidzr2vk. Open points: t-cqjfh5mc.
+
+## Patch 0002 hardening (t-cqjfh5mc)
+
+Done 2026-10-16 (run r-v4jtrhtn): every Term-stack push is covered under
+Emscripten (segment frames by `WL_ROOM`; task entry always starts at the
+stack base, `work_loop` callers pass `stk`/`io_stk`, at most 250 words,
+within the 16 KiB slack; checked by the coordinator in `comp.ts` 4322-4415,
+4450, 5255). `IO.random_u32` and `Process.run` compile on wasm and fail
+loudly (they run on the helper thread); probes `random.bend` and
+`process.bend`. The wasm stack default stays 8 MiB (coordinator's
+decision, see the item).
