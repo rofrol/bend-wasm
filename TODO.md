@@ -156,28 +156,33 @@ Plan and context: `docs/plan.md`.
   the summary, since verify keeps only the tail.
   Decided by the user 2026-10-16 (d-c2aqguer): approved.
 
-- [ ] Bun-free compile path on Node (replaces the QuickJS compile-path [t-y652tp2u]
-  item; the user, 2026-10-16: running programs on QuickJS failing for lack
-  of `bun:ffi` "is weak, maybe throw QuickJS out; ask the models").
-  Consult round `20261016-221426-c9c3` (sol, mimo, deepseek, argon, wonder):
-  `bun:ffi` only serves the JS lane's in-process IO and is off the
-  bootstrap path (compiler -> C -> cc -> native or wasm); the real wall of
-  the QuickJS path was that Bun still builds its bundle; Node, which Debian
-  and Guix ship, needs no shims (mimo, argon, sol). Checked by the
-  coordinator: Node 24.21.0 runs the patched `bend2/main.ts` directly with
-  `--experimental-transform-types` (two constructor parameter properties,
-  `main.ts:827`, `safe.ts:159`, need transform, not just stripping) and a
-  `globalThis.Bun = {}` stand-in for the guard, and emits C byte identical
-  to Bun's for `nat_native.bend` and Robokill's step library.
-  Work: a patch in the series that lets the emit and native-build commands
-  run without Bun (the guard only where `bun:ffi` or `Bun.*` is needed);
-  a check that emits the whole differential corpus on a pinned Node and
-  requires byte identity with Bun's C; one program built to a native binary
-  under Node and run against its expected output; the Node version pinned
-  and documented. QuickJS stays as the recorded result
-  (`docs/quickjs.md`, `tools/quickjs/`).
-  Decided by the user 2026-10-16 (d-76senvng, superseding d-y55x4t3z):
-  Node instead of QuickJS.
+- [ ] Bun-free compile path on QuickJS (the user, 2026-10-16: running [t-gp6pld3m]
+  programs on QuickJS failing for lack of `bun:ffi` "is weak, maybe throw
+  QuickJS out; ask the models", then "why is Node better than QuickJS?
+  ask the models"). Rounds `20261016-221426-c9c3` and
+  `20261016-222217-7c9e` (sol, mimo, deepseek, argon, wonder): `bun:ffi`
+  only serves the JS lane's in-process IO, off the bootstrap path
+  (compiler -> C -> cc -> native or wasm); what decides is type stripping,
+  not the runtime: QuickJS's experiment used a bundle made by Bun. Node's
+  only edge was no shims; its own type stripping is amaro (SWC as a
+  prebuilt wasm), and its chain (V8, C++, Python, OpenSSL, ICU) is far
+  longer than QuickJS's cc + make. Checked by the coordinator: Guix
+  packages esbuild 0.24.0 (Go, from source; `gnu/packages/web.scm`) and
+  node-lts 24.18.0 keeps `deps/amaro` (`gnu/packages/node.scm`), so the
+  models' "Guix strips amaro" was wrong.
+  Work: produce plain JS from the patched `bend2/*.ts` with esbuild
+  (pinned; it handles the two constructor parameter properties,
+  `main.ts:827`, `safe.ts:159`), no Bun in the chain; run it on the pinned
+  QuickJS with the shims of `tools/quickjs/` (plus the spawnSync shim for
+  building a native binary); a patch in the series dropping the Bun guard
+  on the emit and native-build paths instead of the fake `Bun` object; a
+  check that emits the whole differential corpus this way and requires C
+  byte identical to Bun's, with `--stack-size` set from the largest
+  program; one program built to a native binary from that C and run
+  against its expected output.
+  Decided by the user 2026-10-16 (d-6npw3qxi, superseding d-76senvng and
+  d-y55x4t3z): only QuickJS, no Node path. Needs esbuild fetched and pinned
+  by the coordinator.
 
 ## Needs a decision
 
