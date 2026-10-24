@@ -492,7 +492,7 @@ coordinator: branch `bootstrap` of the user's fork `rofrol/bend` (worktree
 `~/personal_projects/bend/bend-bootstrap` of `~/personal_projects/bend/bend`,
 from upstream main 234cb9b9), with the policy the user chose,
 `AGENTS-bend.md` with `LAWS.bend` and `PROOF.bend` (copied from
-`~/personal_projects/agent-kit`), a pointer in upstream's `AGENTS.md`, and
+`~/personal_projects/agents.md`, now `~/personal_projects/agent-kit`), a pointer in upstream's `AGENTS.md`, and
 `BOOTSTRAP.md` (goal and context); commit 2ac9f72c, not pushed. Herdr
 workspace `bend-bootstrap` (wD8), agent `bend-bootstrap` started with a
 first prompt; bend-wasm does not coordinate it.
