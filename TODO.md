@@ -4,6 +4,25 @@ Plan and context: `docs/plan.md`.
 
 ## Next, in order
 
+- [ ] Offer the patch series upstream on [t-yuiyk4uz]
+  https://github.com/bendlang/bend/issues/1598 (the user approves the text
+  first).
+  Include the finding of run r-qvpqkr2n: the work-loop segments pass
+  `Env e` (a two-pointer struct, `comp.ts` 2854, 3420) through `musttail`;
+  wasm32/wasm64 pass it indirectly through the caller's frame, which the
+  tail call frees, so `e.alc` read 0 (fixed in patch 0002 by passing two
+  words); Windows x64 also passes 16-byte structs indirectly and may hit
+  the same, unchecked.
+  Requested by the user 2026-10-29 (from the Robokill session, after
+  oxura's comment https://github.com/bendlang/bend/issues/1598#issuecomment-6481687363
+  that main 4f99f4c1 with Emscripten 6.0.12 fails with "WebAssembly does not
+  support tail calling with byval arguments"): "add a comment there that it
+  works in our fork, give the differences between running Emscripten and our
+  part, speed, memory use etc., and publish those PRs". Small separate PRs
+  first (the maintainer asked for split PRs on
+  https://github.com/bendlang/bend/pull/1578): the two-word Env through
+  musttail and patch 0001's size_t checks, rebased on upstream main.
+
 - [ ] Plain-clang freestanding build replacing emcc (from the Zig and [t-fwjpak4c]
   clang questions; consult rounds `20261016-175818-a3e6` and
   `20261016-194631-afbb`), in steps, each its own commit:
@@ -85,16 +104,6 @@ Plan and context: `docs/plan.md`.
   `probe/lib/run.sh`, which builds wasm only with emcc, so they do not
   cover the plain-clang build; add a `--clang` build there (`glue/build.sh
   --clang`) and make both cases fail on it.
-
-- [ ] Offer the patch series upstream on [t-yuiyk4uz]
-  https://github.com/bendlang/bend/issues/1598 (the user approves the text
-  first).
-  Include the finding of run r-qvpqkr2n: the work-loop segments pass
-  `Env e` (a two-pointer struct, `comp.ts` 2854, 3420) through `musttail`;
-  wasm32/wasm64 pass it indirectly through the caller's frame, which the
-  tail call frees, so `e.alc` read 0 (fixed in patch 0002 by passing two
-  words); Windows x64 also passes 16-byte structs indirectly and may hit
-  the same, unchecked.
 
 - [ ] Requested by the user 2026-10-16: "bring in that loop as work to do, [t-ayhexs3c]
   the one from the fast-code-llm space; ask the models": an autoresearch
