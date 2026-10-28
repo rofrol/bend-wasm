@@ -32,6 +32,13 @@ Plan and context: `docs/plan.md`.
   passes `Env e` by value in `WL_SIG`), test them with Emscripten 6.0.12 (the
   `byval` error) and show the PR texts to the user before opening them.
 
+- [ ] Requested by the user 2026-10-29: "https://github.com/rofrol/bend-wasm [t-rdme29oc]
+  has no README": the repository is public now and linked from
+  https://github.com/bendlang/bend/issues/1598#issuecomment-6483422689; write
+  a README.md (what it is, the pinned toolchain, setup, build, the checks,
+  the measured results, links to docs/ and patches/) from the existing
+  docs, without the user's local paths.
+
 - [ ] Plain-clang freestanding build replacing emcc (from the Zig and [t-fwjpak4c]
   clang questions; consult rounds `20261016-175818-a3e6` and
   `20261016-194631-afbb`), in steps, each its own commit:
