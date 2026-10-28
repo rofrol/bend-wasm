@@ -22,6 +22,15 @@ Plan and context: `docs/plan.md`.
   first (the maintainer asked for split PRs on
   https://github.com/bendlang/bend/pull/1578): the two-word Env through
   musttail and patch 0001's size_t checks, rebased on upstream main.
+  Done 2026-10-29 with the user's go: rofrol/bend-wasm made public (history
+  scanned for secrets first: none); branch
+  https://github.com/rofrol/bend/tree/wasm-2.0.35 (79df8d9 + 0001-0004, one
+  commit each, files byte-equal to `.toolchain/`); comment
+  https://github.com/bendlang/bend/issues/1598#issuecomment-6483422689 (text
+  approved by the user). Left: port the two PRs to main 4f99f4c1 (neither
+  patch applies; 283 commits, comp.ts about 2,500 lines changed; main still
+  passes `Env e` by value in `WL_SIG`), test them with Emscripten 6.0.12 (the
+  `byval` error) and show the PR texts to the user before opening them.
 
 - [ ] Plain-clang freestanding build replacing emcc (from the Zig and [t-fwjpak4c]
   clang questions; consult rounds `20261016-175818-a3e6` and
