@@ -27,10 +27,18 @@ Plan and context: `docs/plan.md`.
   https://github.com/rofrol/bend/tree/wasm-2.0.35 (79df8d9 + 0001-0004, one
   commit each, files byte-equal to `.toolchain/`); comment
   https://github.com/bendlang/bend/issues/1598#issuecomment-6483422689 (text
-  approved by the user). Left: port the two PRs to main 4f99f4c1 (neither
-  patch applies; 283 commits, comp.ts about 2,500 lines changed; main still
-  passes `Env e` by value in `WL_SIG`), test them with Emscripten 6.0.12 (the
-  `byval` error) and show the PR texts to the user before opening them.
+  approved by the user). Ported 2026-10-29 to main 4f99f4c1, pushed to the
+  fork: https://github.com/rofrol/bend/tree/wasm-env-two-words (bc9ab824:
+  WL_SIG takes e.mem/e.alc, the host WL_OPEN rebuilds Env; emcc 6.0.12 byval
+  errors 872 tests -> 0, native output of 879 built tests equal to main) and
+  https://github.com/rofrol/bend/tree/size-checks (6a0030c6: pool_try answers
+  MAP_FAILED for a length past size_t, after consult round
+  `20261029-023856-8d03` found that err_fail there broke corpus_grow's
+  fallback; native output equal to main). comp.ts's permanent 66,000 ttok cap:
+  main 65,956, env 65,989, size 65,967, both 66,000 (the gate passes). Only
+  the pool_try narrowing can truncate on wasm32; the others are bounded (PR
+  text). PR texts drafted in docs/upstream/ (shown to the user 2026-10-29). Left: open the two
+  PRs once the user approves the texts.
 
 - [ ] Requested by the user 2026-10-29: "https://github.com/rofrol/bend-wasm [t-rdme29oc]
   has no README": the repository is public now and linked from
