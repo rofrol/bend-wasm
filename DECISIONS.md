@@ -492,7 +492,7 @@ coordinator: branch `bootstrap` of the user's fork `rofrol/bend` (worktree
 `~/personal_projects/bend/bend-bootstrap` of `~/personal_projects/bend/bend`,
 from upstream main 234cb9b9), with the policy the user chose,
 `AGENTS-bend.md` with `LAWS.bend` and `PROOF.bend` (copied from
-`~/personal_projects/agents.md`), a pointer in upstream's `AGENTS.md`, and
+`~/personal_projects/agents.md`, now `~/personal_projects/agent-kit`), a pointer in upstream's `AGENTS.md`, and
 `BOOTSTRAP.md` (goal and context); commit 2ac9f72c, not pushed. Herdr
 workspace `bend-bootstrap` (wD8), agent `bend-bootstrap` started with a
 first prompt; bend-wasm does not coordinate it.
@@ -703,3 +703,12 @@ binary (spawnSync, ~30-line shim, untried), running a program
 (`bun:ffi`), `--verdict`, publish, page bundling. Reproduced by
 `tools/quickjs/run.sh`; details in `docs/quickjs.md`. Follow-up in
 Proposed.
+
+## Node benchmark out of memory at n = 2,000 (t-m72ghzpf)
+
+Done 2026-10-17 in run r-3pyo47m5 (0377339, t-fwjpak4c step D): the
+cause was `bench/robokill/node-bench.mjs` never disposing a replay's last
+state; the wasm lane keeps a value until it is consumed or disposed
+(`glue/README.md`), so the fixed corpus filled after a few replays. It now
+disposes it. The worker's Node run after the fix: p50 emcc 0.065/0.315 ms,
+clang 0.066/0.314 ms (n = 500/2,000). Not rerun by the coordinator.
